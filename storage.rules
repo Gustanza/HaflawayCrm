@@ -1,0 +1,59 @@
+rules_version = '2';
+
+// Haflaway CRM — Cloud Storage rules. TODO.md §7.2.
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function isSignedIn() { return request.auth != null; }
+    function isActive()   { return isSignedIn() && request.auth.token.get('active', false) == true; }
+    function role()       { return request.auth.token.get('role', ''); }
+    function hasRole(r)   { return isActive() && role() in r; }
+
+    // 10 MB ceiling: agents upload phone photos over 3G (TODO.md §13).
+    function sizeOk()  { return request.resource.size < 10 * 1024 * 1024; }
+    function imageOk() { return request.resource.contentType.matches('image/.*'); }
+
+    // Lead attachments — screenshots of WhatsApp threads, venue photos, signed forms.
+    match /leads/{leadId}/{fileName} {
+      allow read:   if isActive();
+      allow write:  if isActive() && sizeOk();
+      allow delete: if hasRole(['admin', 'manager']);
+    }
+
+    // Receipts back the financial ledger. Agents must never see cost data (§7.1).
+    match /receipts/{expenseId}/{fileName} {
+      allow read:   if hasRole(['admin', 'finance']);
+      allow write:  if hasRole(['admin', 'finance']) && sizeOk();
+      allow delete: if false;
+    }
+
+    // Generated quote PDFs.
+    match /quotes/{leadId}/{fileName} {
+      allow read:  if isActive();
+      allow write: if isActive() && sizeOk();
+      allow delete: if hasRole(['admin', 'manager']);
+    }
+
+    // Delivery assets for a won project.
+    match /projects/{projectId}/{fileName} {
+      allow read:  if isActive();
+      allow write: if isActive() && sizeOk();
+      allow delete: if hasRole(['admin', 'manager']);
+    }
+
+    // Profile photos: own only.
+    match /users/{userId}/{fileName} {
+      allow read:  if isActive();
+      allow write: if isActive() && request.auth.uid == userId && sizeOk() && imageOk();
+    }
+
+    // CSV imports.
+    match /imports/{jobId}/{fileName} {
+      allow read, write: if hasRole(['admin', 'manager']);
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

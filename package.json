@@ -1,0 +1,52 @@
+{
+  "name": "haflawaycrm",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build && node scripts/check-bundle.mjs",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "dev:emulators": "node scripts/free-ports.mjs && firebase emulators:start --import=.emulator-data --export-on-exit=.emulator-data",
+    "lint": "echo lint-not-configured",
+    "test:rules": "node scripts/free-ports.mjs && firebase emulators:exec --only firestore --project haflawaycrm-rules-test \"vitest run --config vitest.rules.config.js\"",
+    "free:ports": "node scripts/free-ports.mjs",
+    "test:all": "vitest run && npm run test:views && npm run test:rules",
+    "seed": "node scripts/seed.js",
+    "claims": "node scripts/syncClaims.js --emulator",
+    "seed:standalone": "node scripts/free-ports.mjs && firebase emulators:exec --only firestore,auth --project haflawaycrm \"node scripts/seed.js\"",
+    "check:bundle": "node scripts/check-bundle.mjs",
+    "smoke": "node scripts/smoke.mjs",
+    "test:integration": "vitest run --config vitest.integration.config.js",
+    "test:views": "vitest run --config vitest.views.config.js",
+    "bootstrap:admin": "node scripts/bootstrap-admin.js",
+    "deploy:rules": "firebase deploy --only firestore:rules,firestore:indexes,storage",
+    "deploy:hosting": "npm run build && firebase deploy --only hosting",
+    "deploy": "npm run deploy:rules && npm run deploy:hosting"
+  },
+  "dependencies": {
+    "@date-fns/tz": "^1.5.0",
+    "date-fns": "^4.4.0",
+    "firebase": "^12.18.0",
+    "libphonenumber-js": "^1.13.11",
+    "pinia": "^4.0.3",
+    "vue": "^3.5.30",
+    "vue-i18n": "^11.4.9",
+    "vue-router": "^5.2.0"
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "^5.0.2",
+    "@tailwindcss/vite": "^4.3.3",
+    "@vitejs/plugin-vue": "^6.0.5",
+    "@vue/test-utils": "^2.4.11",
+    "firebase-admin": "^14.3.0",
+    "firebase-tools": "^15.28.1",
+    "jsdom": "^29.1.1",
+    "tailwindcss": "^4.3.3",
+    "vite": "^8.0.0",
+    "vite-plugin-pwa": "^1.3.0",
+    "vitest": "^4.1.11"
+  }
+}
