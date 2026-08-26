@@ -15,11 +15,11 @@
  * with pre-aggregated rollup docs when the volume justifies it — the formulas in
  * src/domain/metrics.js stay exactly the same.
  */
-import { computed, ref, watch } from 'vue'
+import { computed, ref, shallowRef, watch } from 'vue'
 import { useAuthStore } from '@/stores/auth.js'
 import { useCollection } from '@/composables/useCollection.js'
 import { usePagination, PAGE_SIZES } from '@/composables/usePagination.js'
-import { leadsQuery, expensesQuery } from '@/services/queries.js'
+import { leadsQuery, expensesQuery, campaignsQuery, fetchCampaignSpend } from '@/services/queries.js'
 import { formatMoney, formatPercent } from '@/domain/money.js'
 import { recentMonthKeys, monthKey as monthKeyOf } from '@/domain/periods.js'
 import {
@@ -42,8 +42,47 @@ const { items: leads, loading: loadingLeads, loaded } = useCollection(
 const { items: expenses, loading: loadingExpenses } = useCollection(
   () => (auth.can.viewCosts ? expensesQuery(user.value, { max: 500 }) : null),
 )
+const { items: campaigns, loading: loadingCampaigns } = useCollection(
+  () => (auth.can.viewCosts ? campaignsQuery(user.value, { max: 100 }) : null),
+)
 
-const loading = computed(() => loadingLeads.value || loadingExpenses.value)
+/**
+ * `campaigns/{id}/spend` is a per-campaign subcollection, not one queryable collection (see
+ * fetchCampaignSpend()'s docstring in queries.js) — so it cannot be a plain useCollection()
+ * the way leads/expenses/campaigns are. Loaded once the campaign list settles, and reloaded
+ * if it changes. Without this the CAC this whole screen exists to compute silently excluded
+ * every shilling of ad spend — campaignSpend was hardcoded to [] throughout this file.
+ */
+const campaignSpend = shallowRef([])
+const loadingCampaignSpend = ref(false)
+watch(
+  () => (loadingCampaigns.value ? null : campaigns.value.map((c) => c.id)),
+  async (campaignIds) => {
+    if (!campaignIds) return
+    // Mirrors the expensesQuery/campaignsQuery guard above: a viewer never has cost
+    // access, campaigns.value is always [] for them, and fetchCampaignSpend() asserts
+    // cost access BEFORE checking for an empty list — so this must short-circuit here
+    // rather than call it with zero ids and let it throw.
+    if (!auth.can.viewCosts || campaignIds.length === 0) {
+      campaignSpend.value = []
+      return
+    }
+    loadingCampaignSpend.value = true
+    try {
+      campaignSpend.value = await fetchCampaignSpend(user.value, campaignIds)
+    } finally {
+      loadingCampaignSpend.value = false
+    }
+  },
+  { immediate: true },
+)
+
+const loading = computed(
+  () => loadingLeads.value || loadingExpenses.value || loadingCampaigns.value || loadingCampaignSpend.value,
+)
+
+/** This month's campaign spend entries, the same way monthExpenses filters expenses. */
+const spendForMonth = (key) => campaignSpend.value.filter((s) => s.monthKey === key)
 
 /**
  * A viewer may open this screen but may NOT read expenses (§7.1). With no cost documents
@@ -86,7 +125,11 @@ const monthExpenses = computed(() =>
 )
 
 const summary = computed(() =>
-  summarise(monthLeads.value, { expenses: monthExpenses.value, campaignSpend: [] }, policy),
+  summarise(
+    monthLeads.value,
+    { expenses: monthExpenses.value, campaignSpend: spendForMonth(selectedMonth.value) },
+    policy,
+  ),
 )
 
 /** §8.8: a cohort whose deals are still open understates itself. Say so rather than imply. */
@@ -152,14 +195,30 @@ watch([selectedMonth, basis], () => staffPager.reset())
  * they get no pagination — machinery on a 7-row list is cost with no benefit.
  * The funnel (5 stages) and the trend (6 months) are fixed-length for the same reason.
  */
-const perChannel = computed(() =>
-  cacBy(
+/** A spend entry's channel comes from its PARENT campaign — spend docs carry no channel
+ *  of their own (see fetchCampaignSpend()'s docstring). 'other' matches the fallback every
+ *  other channel-keyed figure on this screen already uses for an unattributed lead. */
+const campaignChannelById = computed(
+  () => new Map(campaigns.value.map((c) => [c.id, c.channel ?? 'other'])),
+)
+const spendByChannelForMonth = (key) => {
+  const byChannel = new Map()
+  for (const entry of spendForMonth(key)) {
+    const channel = campaignChannelById.value.get(entry.campaignId) ?? 'other'
+    byChannel.set(channel, [...(byChannel.get(channel) ?? []), entry])
+  }
+  return byChannel
+}
+
+const perChannel = computed(() => {
+  const byChannel = spendByChannelForMonth(selectedMonth.value)
+  return cacBy(
     monthLeads.value,
     (lead) => lead.attribution?.channel ?? lead.attribution?.source ?? null,
-    () => ({ expenses: [], campaignSpend: [] }),
+    (channel) => ({ expenses: [], campaignSpend: byChannel.get(channel) ?? [] }),
     policy,
-  ),
-)
+  )
+})
 
 const steps = computed(() => funnel(monthLeads.value))
 const maxStep = computed(() => steps.value[0]?.count || 1)
@@ -167,7 +226,10 @@ const maxStep = computed(() => steps.value[0]?.count || 1)
 const trend = computed(() =>
   months.value.map((key) => {
     const set = basis.value === 'cohort' ? cohort(leads.value, key) : closedIn(leads.value, key)
-    const costs = { expenses: expenses.value.filter((e) => e.monthKey === key), campaignSpend: [] }
+    const costs = {
+      expenses: expenses.value.filter((e) => e.monthKey === key),
+      campaignSpend: spendForMonth(key),
+    }
     return { monthKey: key, ...summarise(set, costs, policy) }
   }),
 )

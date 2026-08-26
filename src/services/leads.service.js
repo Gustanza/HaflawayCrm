@@ -24,7 +24,7 @@ import {
 import { getDb } from '@/firebase/app.js'
 import { normalizePhone } from '@/domain/phone.js'
 import { periodKeys } from '@/domain/periods.js'
-import { leadStatusFor, validateTransition } from '@/domain/stages.js'
+import { leadStatusFor, validateTransition, TERMINAL_STAGES } from '@/domain/stages.js'
 import { urgencyScore, qualificationScore, priorityScore } from '@/domain/scoring.js'
 
 /**
@@ -144,10 +144,14 @@ export async function createLead({ input, user }) {
       qualification,
       qualificationScore: qualificationScore({ qualification, guestCountEstimate: input.guestCountEstimate }),
       urgencyScore: urgencyScore(days),
+      // `days` is REQUIRED here, exactly as in recomputeScores() — omitting it skips the
+      // urgency floor (scoring.js §), so a lead with an event 5 days out was stored at 50
+      // instead of the 90 every view actually renders when it recomputes fresh from eventDate.
       priorityScore: priorityScore({
         urgency: urgencyScore(days),
         qualification: qualificationScore({ qualification, guestCountEstimate: input.guestCountEstimate }),
         engagement: 0,
+        days,
       }),
 
       dealValueMinor: null,
@@ -291,7 +295,7 @@ export async function logActivity({ leadId, user, activity }) {
 
   // Write-once, decided against the STORED value rather than a client flag.
   if (activity.outcome === 'spoke') {
-    await markFirstContact(leadId)
+    await markFirstContact(leadId, user)
   }
 
   return activityRef.id
@@ -307,8 +311,15 @@ export async function logActivity({ leadId, user, activity }) {
  *
  * Deliberately fire-and-forget from the caller's point of view: it must never block the
  * agent's logging flow (P7), and offline it queues like any other write.
+ *
+ * `updatedAt`/`updatedBy` are NOT incidental here — firestore.rules' updateStamped() refuses
+ * ANY lead update that omits them, `firstContactedAt` included. Leaving them off meant this
+ * write was rejected outright, every single time, on the single most common activity outcome
+ * an agent logs ("we spoke") — the exception surfaced up through logActivity() as a save
+ * failure, even though the activity entry itself (a separate, already-committed batch) had
+ * saved fine.
  */
-export async function markFirstContact(leadId) {
+export async function markFirstContact(leadId, user) {
   const db = await getDb()
   const leadRef = doc(db, 'leads', leadId)
 
@@ -316,7 +327,11 @@ export async function markFirstContact(leadId) {
     const snap = await tx.get(leadRef)
     if (!snap.exists()) return
     if (snap.data().firstContactedAt) return // already stamped — leave it alone
-    tx.update(leadRef, { firstContactedAt: serverTimestamp() })
+    tx.update(leadRef, {
+      firstContactedAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+      updatedBy: user.uid,
+    })
   })
 }
 
@@ -375,7 +390,12 @@ export async function changeStage({ lead, toStage, user, extra = {} }) {
     ...extra,
   }
 
-  if (['won', 'lost'].includes(toStage)) {
+  // firestore.rules' closureFieldsPresent() requires closedAt/closedBy for EVERY terminal
+  // stage — won, lost, AND disqualified. This used to check only ['won', 'lost'], so moving
+  // a lead to disqualified never stamped them, and the write was refused for every caller,
+  // including a genuine admin — "Missing or insufficient permissions" with no way to act on
+  // it, on the single most common way an unfit lead ever gets closed out.
+  if (TERMINAL_STAGES.includes(toStage)) {
     patch.closedAt = serverTimestamp()
     patch.closedBy = user.uid
     patch.nextActionAt = null // a closed lead must stop appearing in the work queue

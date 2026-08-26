@@ -1,8 +1,8 @@
 <script setup>
 /**
- * Sign-in. Email + password (the decision recorded against D7: admin-invite only,
- * no self-registration — a CRM full of self-registered strangers is a data-leak waiting
- * to happen when 50 people share one lead pool).
+ * Sign-in. Email + password. Self-registration (RegisterView.vue) is the other way in —
+ * D7 originally ruled it out on the theory of one shared org (50 strangers sharing one
+ * lead pool), which no longer applies now that registering mints your OWN isolated org.
  */
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -109,6 +109,11 @@ async function submit() {
     <p class="mt-6 text-center text-sm">
       <RouterLink :to="{ name: 'forgot-password' }" class="text-brand-700 hover:underline">
         {{ $t('auth.forgotPassword') }}
+      </RouterLink>
+    </p>
+    <p class="mt-2 text-center text-sm">
+      <RouterLink :to="{ name: 'register' }" class="text-brand-700 hover:underline">
+        {{ $t('auth.register.title') }}
       </RouterLink>
     </p>
   </div>

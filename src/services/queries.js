@@ -34,7 +34,7 @@
  *   expenses          DENIED           orgId            orgId (not viewer)
  */
 
-import { collection, query, where, orderBy, limit as fbLimit, startAfter } from 'firebase/firestore'
+import { collection, query, where, orderBy, limit as fbLimit, startAfter, getDocs } from 'firebase/firestore'
 import { getDb } from '@/firebase/app.js'
 
 /** Roles whose rule grants org-wide lead reads from CLAIMS alone (§7.1). */
@@ -188,4 +188,29 @@ export async function campaignsQuery(user, { max = 50 } = {}) {
   assertCostAccess(user)
   const db = await getDb()
   return query(collection(db, 'campaigns'), where('orgId', '==', user.orgId), fbLimit(max))
+}
+
+/**
+ * Every spend entry for the given campaigns, flattened into one array.
+ *
+ * Not a single Firestore query: `campaigns/{id}/spend` is a per-campaign subcollection with
+ * no `orgId` of its own (see firestore.rules' `campaignInMyOrg()`), so there is no one
+ * collection to `where('orgId', ...)` against. This is a bounded fan-out over the org's own
+ * campaign list instead — cheap at the scale this product targets (a handful of campaigns,
+ * dozens of spend entries each), and it is the ONLY source of truth for what a campaign has
+ * actually spent. `campaign.spendToDateMinor` looks like a summary field but nothing in this
+ * codebase ever writes it from real spend entries — treat it as decorative, never as data.
+ */
+export async function fetchCampaignSpend(user, campaignIds) {
+  // Checked in this order deliberately: a role with no cost access always has an empty
+  // campaign list to pass in here, and that must return [] quietly rather than throw.
+  if (!campaignIds?.length) return []
+  assertCostAccess(user)
+  const db = await getDb()
+  const snapshots = await Promise.all(
+    campaignIds.map((campaignId) => getDocs(collection(db, 'campaigns', campaignId, 'spend'))),
+  )
+  return snapshots.flatMap((snap, i) =>
+    snap.docs.map((d) => ({ id: d.id, campaignId: campaignIds[i], ...d.data() })),
+  )
 }

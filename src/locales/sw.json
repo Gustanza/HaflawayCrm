@@ -46,6 +46,8 @@
       "tooManyAttempts": "Umejaribu mara nyingi mno. Subiri kidogo kisha ujaribu tena.",
       "network": "Hakuna mtandao. Angalia muunganisho wako.",
       "requiresRecentLogin": "Tafadhali ingia upya kisha ujaribu tena.",
+      "emailInUse": "Barua pepe hii tayari ina akaunti.",
+      "weakPassword": "Tumia herufi 8 au zaidi.",
       "generic": "Kuna tatizo. Jaribu tena."
     },
     "noAccess": {
@@ -58,7 +60,16 @@
     },
     "showPassword": "Onyesha nenosiri",
     "hidePassword": "Ficha nenosiri",
-    "sending": "Inatuma…"
+    "sending": "Inatuma…",
+    "register": {
+      "title": "Fungua akaunti yako",
+      "subtitle": "Sajili kampuni yako uanze.",
+      "companyName": "Jina la kampuni",
+      "companyNamePlaceholder": "mfano: Acme Events",
+      "action": "Fungua akaunti",
+      "done": "Shirika lako liko tayari",
+      "orgStepFailed": "Akaunti yako imetengenezwa, lakini kuandaa shirika lako hakukufanikiwa. Jaribu tena hapa chini."
+    }
   },
   "nav": {
     "workQueue": "Kazi za leo",
@@ -93,6 +104,13 @@
     "parked": "Imesimamishwa",
     "nurture": "Bado mbali",
     "disqualified": "Haifai"
+  },
+  "budgetBand": {
+    "unknown": "Bado haijulikani",
+    "<50k": "Chini ya 50,000",
+    "50-150k": "50,000–150,000",
+    "150-500k": "150,000–500,000",
+    "500k+": "Zaidi ya 500,000"
   },
   "eventType": {
     "harusi": "Harusi",
@@ -164,6 +182,7 @@
   },
   "activity": {
     "title": "Andika kilichotokea",
+    "channel": "Njia",
     "whatHappened": "Ilikuwaje?",
     "remindMe": "Nikumbushe lini?",
     "note": "Maelezo",
@@ -236,6 +255,9 @@
     "parkReason": "Kwa nini imesimamishwa?",
     "confirmMove": "Hamishia {stage}",
     "stageChanged": "Imehamishiwa {stage}",
+    "budgetBand": "Bajeti",
+    "decisionMaker": "Muamuzi",
+    "decisionMakerPlaceholder": "Nani anaamua?",
     "timeline": "Historia",
     "noActivity": "Bado hakuna kilichoandikwa.",
     "voided": "Imefutwa: {reason}"
@@ -335,6 +357,11 @@
     "noneBody": "Ongeza tangazo ili kufuatilia gharama.",
     "attributionNote": "Wateja wanahesabiwa kwa mguso wa kwanza (first-touch).",
     "noLeads": "hakuna mteja hata mmoja",
+    "add": "Ongeza tangazo",
+    "added": "Tangazo limeongezwa",
+    "name": "Jina",
+    "channel": "Njia",
+    "budget": "Bajeti",
     "teamScopeNote": "Unaona matumizi ya matangazo yote, lakini wateja wa timu yako pekee."
   },
   "expenses": {
@@ -396,6 +423,7 @@
     "cohortCaption": "Gharama na matokeo yanahesabiwa kwa mwezi mteja ALIPOINGIA. Jibu: je, pesa ya mwezi ule ilifaa?",
     "periodCaption": "Matokeo yanahesabiwa kwa mwezi biashara ILIPOFUNGWA. Jibu: tulifanyaje mwezi huu?",
     "incompleteCohort": "Mwezi huu bado haujakamilika — biashara nyingi bado ziko wazi, hivyo namba zitapanda.",
+    "noCostAccess": "Nafasi yako haihusishi kuona gharama. Muombe msimamizi, meneja au mfanyakazi wa fedha aone CAC na matumizi.",
     "policyNote": "Mishahara: {salaries} · Komisheni: {commission} · Gharama za jumla: {overhead} · Uhusishaji: {model}"
   },
   "funnel": {
@@ -445,14 +473,11 @@
   },
   "setup": {
     "title": "Usanidi",
-    "subtitle": "Anzisha msimamizi wa kwanza, kisha ongeza wafanyakazi wengine.",
-    "claimTitle": "Wewe ndiye wa kwanza",
-    "claimBody": "Hakuna msimamizi bado. Bonyeza hapa chini ili uwe msimamizi wa kwanza wa mfumo huu.",
-    "claimOnce": "Hii inafanyika mara moja tu. Baada ya hapo, msimamizi ndiye anayeongeza wengine.",
-    "claimAction": "Niwe msimamizi",
-    "claimed": "Sasa wewe ni msimamizi",
-    "alreadyClaimed": "Msimamizi wa kwanza tayari amewekwa. Muombe akuongeze.",
-    "noSentinel": "Mfumo haujaandaliwa. Msimamizi anatakiwa kuendesha amri hii kwenye seva:",
+    "subtitle": "Anzisha shirika lako, kisha ongeza wafanyakazi wengine.",
+    "orgTitle": "Anzisha shirika lako",
+    "orgBody": "Weka jina la kampuni yako ili kuandaa nafasi yake ya kazi. Utakuwa msimamizi wake.",
+    "orgAction": "Anzisha shirika",
+    "orgCreated": "Shirika lako liko tayari",
     "adminOnly": "Ukurasa huu ni wa msimamizi pekee.",
     "addTitle": "Ongeza mfanyakazi",
     "addBody": "Tengeneza akaunti, kisha mpe nafasi yake. Atapokea barua pepe ya kuweka nenosiri lake mwenyewe.",

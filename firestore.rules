@@ -41,11 +41,13 @@ service cloud.firestore {
      *
      * That makes `users/{uid}` security-relevant, so note what guards it: only an admin
      * may write `role`, `teamId`, `orgId` or `isActive` (see the /users rules below), a
-     * user's own self-update is restricted to presentation fields, and the one bootstrap
-     * exception is gated behind a single-use sentinel.
+     * user's own self-update is restricted to presentation fields, and the one exception —
+     * appointing yourself admin of an org you just registered — is gated behind owning that
+     * org's `orgs/{orgId}` document (see the registration block below).
      *
-     * `scripts/syncClaims.js` remains worth running — it turns the fallback back into the
-     * fast path, and disabling the Auth account is still what revokes a session instantly.
+     * The `functions/index.js` `onCreate` trigger normally turns the fallback back into the
+     * fast path within moments; `scripts/syncClaims.js` remains worth running by hand as a
+     * backstop, and disabling the Auth account is still what revokes a session instantly.
      */
 
     function claim(name) {
@@ -224,48 +226,59 @@ service cloud.firestore {
     // ---------------------------------------------------------------------
 
     /**
-     * ── FIRST-ADMIN BOOTSTRAP ────────────────────────────────────────────────
+     * ── SELF-SERVICE ORGANISATION REGISTRATION ────────────────────────────────
      *
-     * A freshly deployed project has no admin, and only an admin can appoint one. This
-     * single-use sentinel is the way out of that, without a script and without leaving a
-     * permanent hole.
+     * Anyone signed in may mint a brand-new `orgId` and become its admin — repeatably, not
+     * a one-time global event. `orgs/{orgId}` is the uniqueness lock: Firestore only allows
+     * a `create` write when no document already exists at that path (`allow create` below
+     * pins that further), so the document's EXISTENCE is the claim. Two callers racing for
+     * the same orgId can never both win; the loser sees the doc already there and the
+     * client tries the next candidate slug (see registerOrganization() in
+     * provisioning.service.js). No boolean latch is needed the way the old single global
+     * `settings/bootstrap` sentinel needed one, because this mutex is per-orgId rather than
+     * per-deployment.
      *
-     * The claim is a two-step mutex, and the ORDER is the safety property:
-     *   1. whoever gets there first flips `settings/bootstrap` to claimed, stamping their
-     *      uid — allowed only while `claimed == false`, so exactly one caller wins
-     *   2. that same uid may then create their own admin `users/{uid}` document, and only
-     *      because step 1 recorded them
-     *
-     * A second caller loses at step 1 and can do nothing at step 2. Once claimed, the door
-     * is shut permanently — there is no rule that sets `claimed` back to false.
-     *
-     * There is no self-signup (D7), so an account has to exist before any of this is
-     * reachable: whoever you create in the Auth console is who can claim it.
+     * `orgs/{orgId}` is never updatable or deletable — its identity is permanent, which is
+     * exactly what makes its mere existence a trustworthy lock.
      */
-    function bootstrapRef() {
-      return /databases/$(database)/documents/settings/bootstrap;
+    function orgRef(orgId) {
+      return /databases/$(database)/documents/orgs/$(orgId);
     }
 
-    function bootstrapClaimedByMe() {
-      return exists(bootstrapRef())
-          && get(bootstrapRef()).data.claimed == true
-          && get(bootstrapRef()).data.claimedBy == uid();
+    function isOrgOwner(orgId) {
+      return exists(orgRef(orgId)) && get(orgRef(orgId)).data.ownerUid == uid();
     }
 
-    match /settings/bootstrap {
-      // Readable by anyone signed in: the setup screen has to know whether to offer the
-      // claim, and it is read BEFORE the caller has any role at all.
-      allow read: if isSignedIn();
+    /**
+     * Mirrors ORG_ID_PATTERN in src/domain/org.js, functions/index.js and
+     * scripts/syncClaims.js. orgId is the prefix of the leadPhoneIndex/{orgId}_{phone} key
+     * (§6.4) — an underscore here would corrupt that split.
+     */
+    function validOrgIdFormat(orgId) {
+      return orgId.matches('^[a-z0-9-]{2,40}$');
+    }
 
-      // One-way latch. No rule anywhere sets `claimed` back to false.
-      allow update: if isSignedIn()
-                    && resource.data.claimed == false
-                    && request.resource.data.claimed == true
-                    && request.resource.data.claimedBy == uid()
-                    && request.resource.data.claimedAt == request.time
-                    && request.resource.data.orgId == resource.data.orgId;
+    match /orgs/{orgId} {
+      // Private: only a member of this org, or the person who created it, may read an
+      // EXISTING doc. A nonexistent doc leaks nothing, so probing for a free slug during
+      // registration is always allowed — that is how the collision-retry loop tells "taken"
+      // from "free" without needing a separate directory to query.
+      allow get:  if resource == null
+                  || (isSignedIn() && myOrg() == orgId)
+                  || (isSignedIn() && resource.data.ownerUid == uid());
+      allow list: if false; // never enumerable — no browsing other companies' names
 
-      allow create, delete: if false;
+      allow create: if isSignedIn()
+                    && validOrgIdFormat(orgId)
+                    && incoming().orgId == orgId
+                    && incoming().ownerUid == uid()
+                    && incoming().createdBy == uid()
+                    && incoming().createdAt == request.time
+                    && incoming().name is string
+                    && incoming().name.size() > 0
+                    && incoming().name.size() <= 200;
+
+      allow update, delete: if false; // identity is permanent — this IS the uniqueness lock
     }
 
     match /users/{userId} {
@@ -280,19 +293,29 @@ service cloud.firestore {
       // finance keep access because they genuinely administer targets and payroll; if that
       // ever stops being true, move the pay fields to their own document rather than
       // widening this rule again.
-      allow read: if isActive() && readingMyOrg()
-                  && (userId == uid() || isManager() || hasRole(['finance']));
+      //
+      // `resource == null` is its own branch, gated on isAdmin() rather than readingMyOrg():
+      // readingMyOrg() dereferences resource.data, which errors (not "false") when resource
+      // is null, so a `get` on a uid with no profile yet was refused outright rather than
+      // returning "not found." That broke adoptExistingUser()'s whole purpose — checking
+      // whether a console-made uid is already provisioned before adopting it — for the one
+      // case it exists to handle: a uid that genuinely has no profile yet. A nonexistent
+      // document carries no org's data to protect, so admin-only is enough of a gate.
+      allow read: if resource == null
+                  ? isAdmin()
+                  : (isActive() && readingMyOrg()
+                     && (userId == uid() || isManager() || hasRole(['finance'])));
 
       // Roles are granted by an admin — from the Setup screen, or scripts/syncClaims.js.
-      // Never self-service, with exactly one exception: the bootstrap winner appointing
-      // themselves admin, which is only reachable while the sentinel names them.
+      // Never self-service, with exactly one exception: appointing yourself admin of an
+      // org you just registered, which is only reachable because `orgs/{orgId}` already
+      // names you as its owner (see the block above).
       allow create: if (isAdmin() && inMyOrg())
                     || (isSignedIn()
                         && userId == uid()
-                        && bootstrapClaimedByMe()
                         && incoming().role == 'admin'
                         && incoming().isActive == true
-                        && incoming().orgId == get(bootstrapRef()).data.orgId);
+                        && isOrgOwner(incoming().orgId));
 
       // A user may edit their own presentation only. Role, team and active status are
       // admin-only: self-promotion would defeat every other rule in this file.
@@ -311,8 +334,9 @@ service cloud.firestore {
     match /usersPublic/{userId} {
       allow read:  if isActive() && readingMyOrg();
       allow write: if (isAdmin() && inMyOrg() && notClobberingAnotherOrg())
-                   // Same exception as /users: the bootstrap winner writes their own row.
-                   || (isSignedIn() && userId == uid() && bootstrapClaimedByMe());
+                   // Same exception as /users: the owner of a freshly registered org
+                   // writes their own row.
+                   || (isSignedIn() && userId == uid() && isOrgOwner(incoming().orgId));
     }
 
     match /teams/{teamId} {
@@ -636,14 +660,7 @@ service cloud.firestore {
 
     match /settings/{docId} {
       allow read:  if isActive() && readingMyOrg();
-      // `docId != 'bootstrap'` is a SECURITY control, not tidiness. Firestore evaluates
-      // every matching rule and ORs the results, so without this exclusion the generic
-      // admin write below grants write access to `settings/bootstrap` as well — and an
-      // admin could flip `claimed` back to false, reopening the one path in the entire
-      // ruleset by which somebody appoints themselves an administrator. The narrower
-      // `match /settings/bootstrap` block above does NOT override this one.
-      allow write: if isAdmin() && inMyOrg() && notClobberingAnotherOrg()
-                   && docId != 'bootstrap';
+      allow write: if isAdmin() && inMyOrg() && notClobberingAnotherOrg();
     }
 
     match /importJobs/{jobId} {

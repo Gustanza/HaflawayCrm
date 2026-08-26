@@ -14,6 +14,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import {
   signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
   signOut as fbSignOut,
   sendPasswordResetEmail,
   onAuthStateChanged,
@@ -36,6 +37,8 @@ const AUTH_ERRORS = {
   'auth/too-many-requests': 'auth.error.tooManyAttempts',
   'auth/network-request-failed': 'auth.error.network',
   'auth/requires-recent-login': 'auth.error.requiresRecentLogin',
+  'auth/email-already-in-use': 'auth.error.emailInUse',
+  'auth/weak-password': 'auth.error.weakPassword',
 }
 
 export function authErrorKey(error) {
@@ -224,6 +227,25 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
+  /**
+   * Self-registration. Unlike `createTeamMember` in provisioning.service.js (which uses a
+   * throwaway secondary app so it never disturbs the ADMIN's own session), this call is
+   * meant to sign the caller in as themselves — there is no other session to protect.
+   */
+  async function registerAccount(email, password) {
+    busy.value = true
+    errorKey.value = null
+    try {
+      await createUserWithEmailAndPassword(auth, email.trim(), password)
+      return true
+    } catch (error) {
+      errorKey.value = authErrorKey(error)
+      return false
+    } finally {
+      busy.value = false
+    }
+  }
+
   async function signOut() {
     stopProfileListener?.()
     stopProfileListener = null
@@ -307,6 +329,7 @@ export const useAuthStore = defineStore('auth', () => {
     user, claims, profile, initialising, busy, errorKey,
     isSignedIn, uid, role, teamId, orgId, isProvisioned, isActive, canUseApp,
     displayName, locale, isAdmin, isManager, isFinance, isAgent, can,
-    init, signIn, signOut, resetPassword, changePassword, refreshClaims, setLocale, clearError,
+    init, signIn, registerAccount, signOut, resetPassword, changePassword, refreshClaims,
+    setLocale, clearError,
   }
 })

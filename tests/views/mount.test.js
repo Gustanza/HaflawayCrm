@@ -100,11 +100,9 @@ vi.mock('@/composables/useCollection.js', () => ({
 vi.mock('@/services/provisioning.service.js', () => ({
   ASSIGNABLE_ROLES: ['admin', 'manager', 'finance', 'agent', 'viewer'],
   ProvisioningError: class extends Error {},
-  readBootstrapState: async () => ({ state: 'open', claimedBy: null, orgId: 'haflaway' }),
-  claimFirstAdmin: async () => ({ orgId: 'haflaway' }),
+  registerOrganization: async () => ({ orgId: 'haflaway' }),
   createTeamMember: async () => ({ uid: 'x', resetEmailSent: true }),
   adoptExistingUser: async () => ({ uid: 'x' }),
-  openBootstrap: async () => {},
 }))
 
 vi.mock('@/composables/useUserNames.js', () => ({
@@ -134,6 +132,7 @@ vi.mock('@/stores/auth.js', () => ({
       manageUsers: currentRole === 'admin',
     },
     changePassword: async () => true, setLocale: async () => {},
+    registerAccount: async () => true, refreshClaims: async () => true,
   }),
 }))
 
@@ -147,6 +146,7 @@ const i18n = createI18n({
 const RouterLink = { props: ['to'], template: '<a><slot /></a>' }
 
 const VIEWS = [
+  ['Register', () => import('../../src/views/auth/RegisterView.vue')],
   ['WorkQueue', () => import('../../src/views/tasks/WorkQueueView.vue')],
   ['LeadList', () => import('../../src/views/leads/LeadListView.vue')],
   ['UrgencyBoard', () => import('../../src/views/leads/UrgencyBoardView.vue')],

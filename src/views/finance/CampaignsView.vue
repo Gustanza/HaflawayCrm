@@ -13,13 +13,18 @@
  * Attribution is FIRST-TOUCH (P5) and the caption says so, because a CAC without a stated
  * attribution model is a lie with a decimal point.
  */
-import { computed } from 'vue'
+import { computed, ref, shallowRef, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
+import { collection, doc, writeBatch, serverTimestamp } from 'firebase/firestore'
+import { getDb } from '@/firebase/app.js'
 import { useAuthStore } from '@/stores/auth.js'
+import { useUiStore } from '@/stores/ui.js'
 import { useCollection } from '@/composables/useCollection.js'
 import { usePagination, PAGE_SIZES } from '@/composables/usePagination.js'
-import { campaignsQuery, leadsQuery } from '@/services/queries.js'
-import { formatMoney, formatPercent } from '@/domain/money.js'
+import { campaignsQuery, leadsQuery, fetchCampaignSpend } from '@/services/queries.js'
+import { formatMoney, formatPercent, divideMinor, toMinor } from '@/domain/money.js'
 import { cacBy, revenueMinor, isWon, LOW_CONFIDENCE_N } from '@/domain/metrics.js'
+import { LEAD_SOURCES } from '@/domain/taxonomies.js'
 import PageHeader from '@/components/layout/PageHeader.vue'
 import LoadingRows from '@/components/ui/LoadingRows.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
@@ -27,6 +32,8 @@ import MetricValue from '@/components/ui/MetricValue.vue'
 import PaginationBar from '@/components/ui/PaginationBar.vue'
 
 const auth = useAuthStore()
+const ui = useUiStore()
+const { t } = useI18n()
 const user = computed(() => ({
   uid: auth.uid, role: auth.role, orgId: auth.orgId, teamId: auth.teamId,
 }))
@@ -39,21 +46,110 @@ const { items: leads, loading: loadingLeads } = useCollection(
   () => leadsQuery(user.value, { max: 500 }),
 )
 
+/**
+ * Creating a campaign — firestore.rules gates this on isFinance() (admin/finance), same as
+ * `auth.can.editCosts`. A manager can READ this screen but not create a campaign; the button
+ * is hidden for them rather than shown and denied.
+ */
+const showForm = ref(false)
+const newName = ref('')
+const newChannel = ref(LEAD_SOURCES[0])
+const newBudget = ref('')
+const saving = ref(false)
+
+const newBudgetMinor = computed(() => (newBudget.value.trim() ? toMinor(newBudget.value) : 0))
+const canSaveCampaign = computed(
+  () => newName.value.trim().length > 0 && newBudgetMinor.value !== null && !saving.value,
+)
+
+async function saveCampaign() {
+  if (!canSaveCampaign.value) return
+  saving.value = true
+  try {
+    const db = await getDb()
+    // Same id on both documents, generated client-side, so the batch below can write the
+    // full campaign AND its redacted (name/channel only, no budget — §7.2) mirror atomically.
+    const campaignRef = doc(collection(db, 'campaigns'))
+    const now = serverTimestamp()
+    const batch = writeBatch(db)
+    batch.set(campaignRef, {
+      orgId: auth.orgId,
+      name: newName.value.trim(),
+      channel: newChannel.value,
+      budgetMinor: newBudgetMinor.value,
+      status: 'active',
+      startDate: now,
+      ownerId: auth.uid,
+      createdAt: now,
+      createdBy: auth.uid,
+      updatedAt: now,
+      updatedBy: auth.uid,
+    })
+    batch.set(doc(db, 'campaignsPublic', campaignRef.id), {
+      orgId: auth.orgId,
+      name: newName.value.trim(),
+      channel: newChannel.value,
+      status: 'active',
+    })
+    await batch.commit()
+
+    ui.success(t('campaigns.added'))
+    newName.value = ''
+    newBudget.value = ''
+    newChannel.value = LEAD_SOURCES[0]
+    showForm.value = false
+    load()
+  } catch {
+    ui.error(t('errors.write.permissionDenied'))
+  } finally {
+    saving.value = false
+  }
+}
+
+/**
+ * `campaign.spendToDateMinor` looks like a running total but nothing in this codebase ever
+ * writes it from real spend entries — it is stale/decorative (confirmed against the seeded
+ * ledger, off by up to ~10x). The real spend ledger is `campaigns/{id}/spend`, fetched here
+ * once the campaign list settles; see fetchCampaignSpend()'s docstring in queries.js for why
+ * this cannot be a plain useCollection() the way campaigns/leads are.
+ */
+const campaignSpend = shallowRef([])
+watch(
+  () => (loadingCampaigns.value ? null : campaigns.value.map((c) => c.id)),
+  async (campaignIds) => {
+    if (!campaignIds) return
+    // This screen is route-gated to admin/manager/finance in real use, but that guard is
+    // convenience, not access control (TODO.md P10) — fetchCampaignSpend() itself refuses a
+    // role with no cost access, so check first rather than let it throw unhandled.
+    if (!auth.can.viewCosts || campaignIds.length === 0) {
+      campaignSpend.value = []
+      return
+    }
+    campaignSpend.value = await fetchCampaignSpend(user.value, campaignIds)
+  },
+  { immediate: true },
+)
+
 const loading = computed(() => loadingCampaigns.value || loadingLeads.value)
 
 const byId = computed(() => new Map(campaigns.value.map((c) => [c.id, c])))
 
-/**
- * `spendToDateMinor` is maintained transactionally on the campaign document as spend
- * entries are appended, so a row does not need to read the whole sub-collection.
- */
+/** Real spend, summed from the ledger — grouped by campaign so each row reads its own slice. */
+const spendMinorById = computed(() => {
+  const totals = new Map()
+  for (const entry of campaignSpend.value) {
+    totals.set(entry.campaignId, (totals.get(entry.campaignId) ?? 0) + (entry.amountMinor ?? 0))
+  }
+  return totals
+})
+
 const rows = computed(() => {
   const measured = cacBy(
     leads.value,
     (lead) => lead.attribution?.campaignId ?? null,
     (campaignId) => ({
       expenses: [],
-      campaignSpend: [{ amountMinor: byId.value.get(campaignId)?.spendToDateMinor ?? 0 }],
+      campaignSpend: [{ amountMinor: spendMinorById.value.get(campaignId) ?? 0 }],
     }),
     // Campaign CAC is ad spend over customers won. Staff cost is not attributed here —
     // §9 puts that allocation in the per-staff view, where the policy applies.
@@ -73,7 +169,7 @@ const rows = computed(() => {
   return campaigns.value
     .map((campaign) => {
       const measuredRow = byCampaign.get(campaign.id)
-      const spend = campaign.spendToDateMinor ?? 0
+      const spend = spendMinorById.value.get(campaign.id) ?? 0
       const leadCount = measuredRow?.leads ?? 0
 
       return {
@@ -91,7 +187,7 @@ const rows = computed(() => {
         channel: campaign.channel ?? 'other',
         spendMinor: spend,
         budgetMinor: campaign.budgetMinor ?? 0,
-        cplMinor: leadCount ? Math.round(spend / leadCount) : null,
+        cplMinor: leadCount ? divideMinor(spend, leadCount) : null,
         roas: spend ? (measuredRow?.revenueMinor ?? 0) / spend : null,
         // Flagged so the template can call it out rather than let a row of dashes pass
         // for a rendering glitch.
@@ -139,9 +235,66 @@ const totals = computed(() => {
 
 <template>
   <div>
-    <PageHeader :title="$t('nav.campaigns')" :subtitle="$t('campaigns.subtitle')" />
+    <PageHeader :title="$t('nav.campaigns')" :subtitle="$t('campaigns.subtitle')">
+      <template v-if="auth.can.editCosts" #actions>
+        <button type="button" class="btn-primary text-sm" @click="showForm = !showForm">
+          + {{ $t('campaigns.add') }}
+        </button>
+      </template>
+    </PageHeader>
 
     <div class="px-4 sm:px-6 py-4 sm:py-6">
+    <section v-if="showForm" class="card p-4 mb-4">
+      <h2 class="font-medium text-slate-900 mb-3">{{ $t('campaigns.add') }}</h2>
+
+      <div class="space-y-3">
+        <div>
+          <label for="c-name" class="field-label">{{ $t('campaigns.name') }}</label>
+          <input id="c-name" v-model="newName" type="text" class="field-input" />
+        </div>
+
+        <div>
+          <label for="c-channel" class="field-label">{{ $t('campaigns.channel') }}</label>
+          <select id="c-channel" v-model="newChannel" class="field-input">
+            <option v-for="s in LEAD_SOURCES" :key="s" :value="s">{{ $t(`source.${s}`) }}</option>
+          </select>
+        </div>
+
+        <div>
+          <label for="c-budget" class="field-label">
+            {{ $t('campaigns.budget') }} (TZS)
+            <span class="font-normal text-slate-400">· {{ $t('common.optional') }}</span>
+          </label>
+          <input
+            id="c-budget"
+            v-model="newBudget"
+            type="text"
+            inputmode="numeric"
+            class="field-input tabular-nums"
+            placeholder="1000000"
+            :aria-invalid="newBudget.length > 0 && newBudgetMinor === null"
+          />
+          <p v-if="newBudget.length > 0 && newBudgetMinor === null" class="field-error">
+            {{ $t('expenses.invalidAmount') }}
+          </p>
+        </div>
+
+        <div class="flex gap-2">
+          <button type="button" class="btn-secondary flex-1" @click="showForm = false">
+            {{ $t('common.cancel') }}
+          </button>
+          <button
+            type="button"
+            class="btn-primary flex-1"
+            :disabled="!canSaveCampaign"
+            @click="saveCampaign"
+          >
+            {{ saving ? $t('common.loading') : $t('common.save') }}
+          </button>
+        </div>
+      </div>
+    </section>
+
     <LoadingRows v-if="loading && !loaded" :rows="4" />
 
     <div v-else-if="error" class="card p-6 text-center">

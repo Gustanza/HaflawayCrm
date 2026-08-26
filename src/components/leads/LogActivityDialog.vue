@@ -38,6 +38,17 @@ const OUTCOMES = [
   { value: 'wrong_number', key: 'activity.outcome.wrongNumber', tone: 'bad' },
 ]
 
+/**
+ * How this interaction happened. Defaults to 'call' and stays a single optional tap, not a
+ * required step — P7's ≤3-tap flow (outcome → snooze → save) still holds for the common
+ * case. Without this every logged activity was recorded and displayed as "Call" regardless
+ * of what actually happened (WhatsApp, SMS, an in-person visit), corrupting the timeline
+ * P1 calls "the primary record, not a footnote." Limited to the channels an activity TYPE
+ * icon already exists for (see ACTIVITY_ICON in LeadDetailView.vue) — facebook/instagram/
+ * email are first-touch ATTRIBUTION channels, not things you log a follow-up call as.
+ */
+const CHANNEL_OPTIONS = ['call', 'whatsapp', 'sms', 'visit']
+
 /** "Remind me…" — the literal user request, one tap from the lead (§10.2). */
 const SNOOZES = [
   { hours: 2, key: 'snooze.twoHours' },
@@ -164,6 +175,31 @@ function onKeydown(event) {
       </header>
 
       <div class="p-4 space-y-5">
+        <!-- Optional: how it happened. Defaults to "call" so this never costs a tap unless
+             the agent actually needs to change it. -->
+        <fieldset>
+          <legend class="field-label">
+            {{ $t('activity.channel') }}
+            <span class="font-normal text-slate-400">· {{ $t('common.optional') }}</span>
+          </legend>
+          <div class="flex flex-wrap gap-2">
+            <button
+              v-for="option in CHANNEL_OPTIONS"
+              :key="option"
+              type="button"
+              class="rounded-full px-4 text-sm font-medium ring-1 ring-inset ring-slate-400
+                     bg-white text-slate-700 data-[on=true]:bg-brand-600
+                     data-[on=true]:text-white data-[on=true]:ring-brand-600"
+              style="min-height: var(--spacing-touch)"
+              :data-on="channel === option"
+              :aria-pressed="channel === option"
+              @click="channel = option"
+            >
+              {{ $t(`activityType.${option}`) }}
+            </button>
+          </div>
+        </fieldset>
+
         <!-- Tap 1: what happened -->
         <fieldset>
           <legend class="field-label">{{ $t('activity.whatHappened') }}</legend>

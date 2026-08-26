@@ -48,3 +48,6 @@ firebase-export-*/
 
 # local scratch
 .scratch/
+
+# Locally-downloaded JDK, for running the Firestore/Functions emulators
+.jdk/

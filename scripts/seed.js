@@ -230,10 +230,12 @@ async function seedReference() {
   }
 
   for (const c of CAMPAIGNS) {
+    // No spendToDateMinor field: nothing in the app maintains it from real spend entries
+    // (that field used to exist here and was the seed of a real bug — see queries.js'
+    // fetchCampaignSpend() docstring). The spend ledger below is the only source of truth.
     await db.doc(`campaigns/${c.id}`).set({
       orgId: ORG, ...c, status: 'active',
       startDate: Timestamp.fromDate(daysFromNow(-90)),
-      spendToDateMinor: Math.round(c.budgetMinor * 0.6),
       ownerId: 'u-mgr-dar',
       createdAt: Timestamp.now(), createdBy: 'seed',
       updatedAt: Timestamp.now(), updatedBy: 'seed',
@@ -457,14 +459,16 @@ async function seedSettings() {
   })
   await db.doc('settings/lossReasons').set({ orgId: ORG, reasons: LOSS_REASONS })
 
-  // The first-admin latch. Seeded ALREADY CLAIMED, because the seed also creates a real
-  // admin — leaving it open would mean any seeded account could re-appoint itself.
-  // Deploy to a fresh project with `claimed: false` to make the Setup screen offer it.
-  await db.doc('settings/bootstrap').set({
-    claimed: true,
-    claimedBy: 'u-admin',
-    claimedAt: Timestamp.now(),
+  // Without this, ORG is unclaimed as far as `orgs/{orgId}` is concerned, and
+  // firestore.rules' self-registration path grants admin to whoever creates that document
+  // first — so anyone who ever ran `/register` with the company name "Haflaway" against a
+  // deployment seeded this way could claim this exact org out from under it.
+  await db.doc(`orgs/${ORG}`).set({
     orgId: ORG,
+    name: 'Haflaway',
+    ownerUid: 'u-admin',
+    createdBy: 'u-admin',
+    createdAt: Timestamp.now(),
   })
   console.log('  settings')
 }

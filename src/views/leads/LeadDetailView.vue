@@ -20,6 +20,7 @@ import { useUiStore } from '@/stores/ui.js'
 import { useCollection, useDoc } from '@/composables/useCollection.js'
 import { changeStage } from '@/services/leads.service.js'
 import { nextStages, validateTransition, LOSS_REASONS, PARK_REASONS } from '@/domain/stages.js'
+import { BUDGET_BANDS } from '@/domain/taxonomies.js'
 import { formatPhone, toTelLink, toWhatsAppLink } from '@/domain/phone.js'
 import { formatMoney, toMinor } from '@/domain/money.js'
 import { toDate } from '@/domain/periods.js'
@@ -89,6 +90,12 @@ const pendingStage = ref(null)
 const lossReason = ref('')
 const parkReason = ref('')
 const dealValue = ref('')
+// §5.3 BEDS: 'qualified' needs budget and decision-maker known. There is no contacts
+// subsystem yet (TODO.md), so decisionMakerContactId is captured here as a plain name —
+// a real contact reference can replace this input without touching the state machine,
+// which only ever checks that the field is non-empty.
+const budgetBand = ref('unknown')
+const decisionMaker = ref('')
 
 const telLink = computed(() => toTelLink(lead.value?.primaryPhoneNormalized))
 const whatsappLink = computed(() =>
@@ -111,6 +118,16 @@ const extras = computed(() => {
     const minor = toMinor(dealValue.value)
     if (minor !== null) out.dealValueMinor = minor
   }
+  if (stage === 'qualified' && (budgetBand.value !== 'unknown' || decisionMaker.value.trim())) {
+    // A full merged object, not a dotted-path key: validateTransition() reads
+    // qualification.budgetBand by walking the nested object, and the Firestore write below
+    // must not clobber committeeMeetsOn/interestedProductIds that are already set.
+    out.qualification = {
+      ...(lead.value?.qualification ?? {}),
+      budgetBand: budgetBand.value,
+      decisionMakerContactId: decisionMaker.value.trim() || null,
+    }
+  }
   return out
 })
 
@@ -125,6 +142,8 @@ function openStage(stage) {
   lossReason.value = ''
   parkReason.value = ''
   dealValue.value = lead.value?.dealValueMinor ? String(lead.value.dealValueMinor / 100) : ''
+  budgetBand.value = lead.value?.qualification?.budgetBand ?? 'unknown'
+  decisionMaker.value = lead.value?.qualification?.decisionMakerContactId ?? ''
 }
 
 async function confirmStage() {
@@ -294,6 +313,27 @@ const ACTIVITY_ICON = {
                 {{ $t(`parkReason.${r}`) }}
               </option>
             </select>
+          </div>
+
+          <div v-if="pendingStage === 'qualified'" class="space-y-3">
+            <div>
+              <label for="budget" class="field-label">{{ $t('detail.budgetBand') }}</label>
+              <select id="budget" v-model="budgetBand" class="field-input">
+                <option v-for="b in BUDGET_BANDS" :key="b" :value="b">
+                  {{ $t(`budgetBand.${b}`) }}
+                </option>
+              </select>
+            </div>
+            <div>
+              <label for="decision-maker" class="field-label">{{ $t('detail.decisionMaker') }}</label>
+              <input
+                id="decision-maker"
+                v-model="decisionMaker"
+                type="text"
+                class="field-input"
+                :placeholder="$t('detail.decisionMakerPlaceholder')"
+              />
+            </div>
           </div>
 
           <div v-if="pendingStage === 'won' || pendingStage === 'quoted'">

@@ -1,11 +1,12 @@
 /**
- * Create the FIRST admin. The one command you cannot run from inside the app.
+ * Mint an admin directly from the command line, bypassing the app entirely.
  *
- * ── THE CHICKEN AND EGG ───────────────────────────────────────────────────────
- * There is no self-signup (TODO.md D7: admin-invite only). Every screen is behind
- * `canUseApp`, which needs a role claim, and only an admin can grant one. So a freshly
- * deployed project has nobody who can let anybody in. This script is the way in, and it
- * is deliberately the ONLY thing in the repo that can mint an administrator.
+ * ── WHY THIS STILL EXISTS ───────────────────────────────────────────────────
+ * Self-registration (RegisterView.vue → registerOrganization()) is now the normal way
+ * someone becomes admin of their own new organisation — see /register. This script covers
+ * what that flow does not: appointing an admin into an ALREADY-EXISTING org without going
+ * through the browser (support, migrations, recovering a locked-out org), or setting one up
+ * on a fresh deploy with no UI involved at all.
  *
  * It does the three things that must all happen, or the account half-works:
  *   1. creates the Firebase Auth user            → they can authenticate
@@ -164,8 +165,31 @@ async function main() {
   await auth.setCustomUserClaims(user.uid, claims)
   console.log(`  + claims set: ${JSON.stringify(claims)}`)
 
-  // 3. The profile, and the redacted mirror the UI reads names from.
   const now = new Date()
+
+  // 2.5. The org's registration lock. Without this, `orgId` stays unclaimed as far as
+  // `orgs/{orgId}` is concerned — and firestore.rules' self-registration path grants admin
+  // to WHOEVER creates that document first. Skipping this step left every org provisioned
+  // by this script (or by scripts/seed.js) open to being claimed out from under it by a
+  // stranger who simply visits /register with a matching company name. This is the same
+  // lock `registerOrganization()` creates transactionally in the browser; here it is a
+  // trusted, non-racing write, so a plain existence check is sufficient.
+  const orgRef = db.doc(`orgs/${orgId}`)
+  const orgSnap = await orgRef.get()
+  if (!orgSnap.exists) {
+    await orgRef.set({
+      orgId,
+      name: typeof args['company-name'] === 'string' ? args['company-name'] : orgId,
+      ownerUid: user.uid,
+      createdBy: user.uid,
+      createdAt: now,
+    })
+    console.log(`  + orgs/${orgId} created — closes the self-registration hijack gap`)
+  } else {
+    console.log(`  · orgs/${orgId} already registered — no hijack risk for this org`)
+  }
+
+  // 3. The profile, and the redacted mirror the UI reads names from.
   await db.doc(`users/${user.uid}`).set(
     {
       orgId,

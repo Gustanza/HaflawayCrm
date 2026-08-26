@@ -2,32 +2,37 @@
 /**
  * Setup — the one screen that works before anybody has a role.
  *
- * It answers two questions depending on who is looking:
+ * It answers three questions depending on who is looking:
  *
- *   1. NOBODY IS ADMIN YET, and you are signed in with no role. You were created in the
- *      Firebase Auth console and the app would otherwise send you to /no-access forever.
- *      This offers the one-time claim that makes you the first administrator.
+ *   1. NO ROLE, NO PROFILE. Either a fresh registration whose organisation step failed
+ *      partway (see RegisterView.vue's recovery case), or an account created directly in
+ *      the Firebase Auth console. Either way, this offers the same "create your
+ *      organisation" step RegisterView runs, and becomes its admin.
  *
- *   2. YOU ARE AN ADMIN. This creates everyone else — account, role, profile and the
+ *   2. NO ROLE, BUT A PROFILE EXISTS. Provisioning has happened — self-registration just
+ *      completed, or an admin invited this person — and the claim just has not landed on
+ *      this token yet. Same "check again" as /no-access, offered here too so a person who
+ *      followed that screen's link to Setup is not bounced straight back.
+ *
+ *   3. YOU ARE AN ADMIN. This creates everyone else — account, role, profile and the
  *      redacted name mirror — without anybody opening a terminal.
  *
  * WHAT IT CANNOT DO, and says so plainly: set a custom claim. That is Admin SDK only.
  * `firestore.rules` therefore reads the claim first and falls back to `users/{uid}`, so
- * people created here work immediately; `npm run claims` later converts the fallback into
- * the zero-extra-read fast path. The screen states this rather than leaving it as folklore.
+ * people created here work immediately; `functions/index.js`'s `onCreate` trigger normally
+ * converts the fallback into the zero-extra-read fast path within moments. `npm run claims`
+ * remains a manual backstop, stated here rather than left as folklore.
  */
-import { computed, onMounted, ref } from 'vue'
+import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth.js'
 import { useUiStore } from '@/stores/ui.js'
 import {
   ASSIGNABLE_ROLES,
-  ProvisioningError,
   adoptExistingUser,
-  claimFirstAdmin,
   createTeamMember,
-  readBootstrapState,
+  registerOrganization,
 } from '@/services/provisioning.service.js'
 import PageHeader from '@/components/layout/PageHeader.vue'
 
@@ -36,44 +41,52 @@ const ui = useUiStore()
 const router = useRouter()
 const { t } = useI18n()
 
-const bootstrap = ref({ state: 'unknown' })
-const checking = ref(true)
-
-onMounted(async () => {
-  bootstrap.value = await readBootstrapState()
-  checking.value = false
-})
-
 const isAdmin = computed(() => auth.role === 'admin')
-const canClaim = computed(() => !auth.role && bootstrap.value.state === 'open')
+const canRegisterOrg = computed(() => !auth.role && !auth.profile)
+const stillSyncing = computed(() => !auth.role && Boolean(auth.profile))
 
-/* ─────────────────────────────────────────────────────────── claim first admin */
+/* ─────────────────────────────────────────────────────── create an organisation */
 
-const claimName = ref('')
-const claiming = ref(false)
+const orgCompanyName = ref('')
+const orgDisplayName = ref('')
+const registeringOrg = ref(false)
 
-async function claim() {
-  if (claiming.value) return
-  claiming.value = true
+async function registerOrg() {
+  if (registeringOrg.value || !orgCompanyName.value.trim()) return
+  registeringOrg.value = true
   try {
-    await claimFirstAdmin({
+    await registerOrganization({
       user: { uid: auth.uid, email: auth.user?.email },
-      displayName: claimName.value,
+      companyName: orgCompanyName.value,
+      displayName: orgDisplayName.value,
     })
-    ui.success(t('setup.claimed'))
-    // The rules now authorise from the document, so a token refresh is not required —
-    // but the store still needs to pick the profile up before the nav re-renders.
+    ui.success(t('setup.orgCreated'))
     await auth.refreshClaims()
-    bootstrap.value = await readBootstrapState()
     router.replace({ name: 'work-queue' })
   } catch (error) {
-    ui.error(
-      error instanceof ProvisioningError && error.code === 'bootstrap-claimed'
-        ? t('setup.alreadyClaimed')
-        : (error.message ?? t('errors.write.generic')),
-    )
+    ui.error(error?.message ?? t('errors.write.generic'))
   } finally {
-    claiming.value = false
+    registeringOrg.value = false
+  }
+}
+
+/* ────────────────────────────────────────────────────────── check again */
+
+const checkingAgain = ref(false)
+
+async function checkAgain() {
+  checkingAgain.value = true
+  try {
+    const refreshed = await auth.refreshClaims()
+    if (refreshed && auth.canUseApp) {
+      router.replace({ name: 'work-queue' })
+    } else if (!refreshed) {
+      ui.error(t(auth.errorKey ?? 'auth.error.network'))
+    } else {
+      ui.info(t('auth.noAccess.stillWaiting'))
+    }
+  } finally {
+    checkingAgain.value = false
   }
 }
 
@@ -153,41 +166,55 @@ async function submit() {
     <PageHeader :title="$t('setup.title')" :subtitle="$t('setup.subtitle')" />
 
     <div class="px-4 sm:px-6 py-4 sm:py-6 max-w-2xl space-y-5">
-      <p v-if="checking" class="text-sm text-slate-500">{{ $t('common.loading') }}</p>
-
-      <!-- ── 1. First-admin claim ─────────────────────────────────────────── -->
-      <section v-else-if="canClaim" class="card p-5 ring-2 ring-brand-500">
-        <h2 class="font-semibold text-slate-900">{{ $t('setup.claimTitle') }}</h2>
-        <p class="mt-1 text-sm text-slate-600">{{ $t('setup.claimBody') }}</p>
+      <!-- ── 1. Create an organisation ────────────────────────────────────── -->
+      <section v-if="canRegisterOrg" class="card p-5 ring-2 ring-brand-500">
+        <h2 class="font-semibold text-slate-900">{{ $t('setup.orgTitle') }}</h2>
+        <p class="mt-1 text-sm text-slate-600">{{ $t('setup.orgBody') }}</p>
 
         <div class="mt-4">
-          <label for="claim-name" class="field-label">{{ $t('settings.displayName') }}</label>
+          <label for="org-name" class="field-label">{{ $t('auth.register.companyName') }}</label>
           <input
-            id="claim-name"
-            v-model="claimName"
+            id="org-name"
+            v-model="orgCompanyName"
+            type="text"
+            class="field-input"
+            :placeholder="$t('auth.register.companyNamePlaceholder')"
+          />
+        </div>
+
+        <div class="mt-4">
+          <label for="org-display-name" class="field-label">{{ $t('settings.displayName') }}</label>
+          <input
+            id="org-display-name"
+            v-model="orgDisplayName"
             type="text"
             class="field-input"
             :placeholder="auth.user?.email"
           />
         </div>
 
-        <p class="mt-3 text-xs text-slate-500">{{ $t('setup.claimOnce') }}</p>
-
-        <button type="button" class="btn-primary w-full mt-4" :disabled="claiming" @click="claim">
-          {{ claiming ? $t('common.loading') : $t('setup.claimAction') }}
+        <button
+          type="button"
+          class="btn-primary w-full mt-4"
+          :disabled="registeringOrg || !orgCompanyName.trim()"
+          @click="registerOrg"
+        >
+          {{ registeringOrg ? $t('common.loading') : $t('setup.orgAction') }}
         </button>
       </section>
 
-      <!-- ── 2. Signed in, no role, and the door is already shut ──────────── -->
-      <section v-else-if="!auth.role" class="card p-5">
+      <!-- ── 2. Provisioned, but the claim has not landed on this token yet ── -->
+      <section v-else-if="stillSyncing" class="card p-5">
         <h2 class="font-semibold text-slate-900">{{ $t('auth.noAccess.title') }}</h2>
-        <p class="mt-1 text-sm text-slate-600">
-          {{ bootstrap.state === 'missing' ? $t('setup.noSentinel') : $t('setup.alreadyClaimed') }}
-        </p>
-        <code
-          v-if="bootstrap.state === 'missing'"
-          class="mt-3 block text-xs bg-slate-100 rounded px-2 py-1.5 text-slate-800"
-        >npm run bootstrap:admin -- --prod --email=you@haflaway.com</code>
+        <p class="mt-1 text-sm text-slate-600">{{ $t('auth.noAccess.stillWaiting') }}</p>
+        <button
+          type="button"
+          class="btn-primary w-full mt-4"
+          :disabled="checkingAgain"
+          @click="checkAgain"
+        >
+          {{ checkingAgain ? $t('common.loading') : $t('auth.noAccess.checkAgain') }}
+        </button>
       </section>
 
       <!-- ── 3. Not an admin ─────────────────────────────────────────────── -->

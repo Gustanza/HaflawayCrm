@@ -22,6 +22,12 @@ const routes = [
     meta: { public: true, layout: 'auth', titleKey: 'auth.signIn' },
   },
   {
+    path: '/register',
+    name: 'register',
+    component: () => import('@/views/auth/RegisterView.vue'),
+    meta: { public: true, layout: 'auth', titleKey: 'auth.register.title' },
+  },
+  {
     path: '/forgot-password',
     name: 'forgot-password',
     component: () => import('@/views/auth/ForgotPasswordView.vue'),
@@ -166,8 +172,11 @@ router.beforeEach(async (to) => {
   }
 
   if (to.meta.public) {
-    // Already signed in and provisioned? Skip the login screen.
-    if (authStore.canUseApp && (to.name === 'login' || to.name === 'forgot-password')) {
+    // Already signed in and provisioned? Skip the login/register screens.
+    if (
+      authStore.canUseApp &&
+      ['login', 'register', 'forgot-password'].includes(to.name)
+    ) {
       return { name: 'work-queue' }
     }
     return true
