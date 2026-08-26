@@ -349,3 +349,53 @@ describe('STAGES enum', () => {
     expect(Object.values(STAGES)).toEqual(STAGE_LIST)
   })
 })
+
+/**
+ * The board is the only place a lead is grouped by `filter(l => l.stage === column)`, which
+ * means a stage with no column renders nowhere — the lead is not "elsewhere", it is gone
+ * from the screen. This suite exists because `nurture`, `parked` and `disqualified` were
+ * added to TRANSITIONS without being added to BOARD_ORDER, so the move dialog offered
+ * destinations that made the card disappear.
+ */
+describe('BOARD_ORDER can render every stage a lead can reach', () => {
+  it('has a column for every stage in STAGES', () => {
+    const missing = STAGE_LIST.filter((stage) => !BOARD_ORDER.includes(stage))
+    expect(missing, `stages with no board column: ${missing.join(', ')}`).toEqual([])
+  })
+
+  it('has a column for every destination the move dialog can offer', () => {
+    // What the UI actually puts in front of the user is nextStages(), i.e. TRANSITIONS.
+    const offered = [...new Set(Object.values(TRANSITIONS).flat())]
+    const undisplayable = offered.filter((stage) => !BOARD_ORDER.includes(stage))
+    expect(
+      undisplayable,
+      `move dialog can send a lead to a stage with no column: ${undisplayable.join(', ')}`,
+    ).toEqual([])
+  })
+
+  it('has a column for every stage a lead can be in, from either side of the machine', () => {
+    // Belt and braces: sources as well as destinations.
+    const reachable = [...new Set([...Object.keys(TRANSITIONS), ...Object.values(TRANSITIONS).flat()])]
+    for (const stage of reachable) {
+      expect(BOARD_ORDER, `${stage} is reachable but has no column`).toContain(stage)
+    }
+  })
+
+  it('lists no stage twice and invents none', () => {
+    expect(new Set(BOARD_ORDER).size, 'duplicate column').toBe(BOARD_ORDER.length)
+    for (const stage of BOARD_ORDER) expect(isValidStage(stage), `${stage} is not a stage`).toBe(true)
+  })
+
+  it('can style and therefore render every column', () => {
+    // A column with no style entry renders unreadable, which is its own kind of invisible.
+    for (const stage of BOARD_ORDER) {
+      expect(STAGE_STYLES[stage], `${stage} has no STAGE_STYLES entry`).toBeTruthy()
+    }
+  })
+
+  it('keeps the terminal stages at the end', () => {
+    const firstTerminal = BOARD_ORDER.findIndex((s) => TERMINAL_STAGES.includes(s))
+    const lastOpen = BOARD_ORDER.reduce((acc, s, i) => (OPEN_STAGES.includes(s) ? i : acc), -1)
+    expect(firstTerminal, 'an open stage sits after a terminal one').toBeGreaterThan(lastOpen)
+  })
+})

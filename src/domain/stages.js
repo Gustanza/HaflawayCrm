@@ -230,16 +230,33 @@ export const STAGE_STYLES = Object.freeze({
   disqualified: 'bg-neutral-200 text-neutral-500 ring-neutral-300',
 })
 
-/** Left-to-right order for the kanban board. Terminal stages sit at the end. */
+/**
+ * Left-to-right order for the kanban board. Terminal stages sit at the end.
+ *
+ * MUST list EVERY stage in `STAGES`. The board groups leads with
+ * `filter(l => l.stage === column)`, so a stage missing from here has no column and its
+ * leads are not rendered anywhere at all - they do not fall into an "other" bucket, they
+ * silently vanish. That is exactly what happened when `nurture`, `parked` and
+ * `disqualified` were added to TRANSITIONS but not to this list: the move dialog offered
+ * destinations the board could not display. `stages.test.js` now asserts the invariant.
+ *
+ * LeadListView derives its filter chips from this array too, so an omission there also
+ * removes the only way to filter back to the lost stage.
+ */
 export const BOARD_ORDER = Object.freeze([
   'new',
   'contacted',
+  // The three holding states sit next to `unreachable` because that is where they come
+  // from in practice: you could not reach them, so you park them, or you keep them warm.
   'unreachable',
+  'parked',
+  'nurture',
   'qualified',
   'quoted',
   'negotiation',
   'won',
   'lost',
+  'disqualified',
 ])
 
 export const LOSS_REASONS = Object.freeze([

@@ -271,6 +271,24 @@ describe('paginated views actually page', () => {
     expect(errors).toEqual([])
   })
 
+  it('the pipeline renders one column per BOARD_ORDER stage', async () => {
+    // The board groups by `filter(l => l.stage === column)`, so a stage with no column
+    // makes its leads vanish from the screen entirely. This ties the rendered board to the
+    // domain constant so the two cannot drift apart again.
+    const { BOARD_ORDER } = await import('../../src/domain/stages.js')
+    const wrapper = await mountView(() => import('../../src/views/leads/PipelineView.vue'))
+    const headings = wrapper.findAll('section h2, section h3').map((n) => n.text())
+    expect(wrapper.findAll('section').length, 'column count != BOARD_ORDER length')
+      .toBe(BOARD_ORDER.length)
+    // And the three that were missing must actually be on screen. Resolved through the
+    // locale file rather than hard-coded, so a translation edit cannot break this.
+    for (const stage of ['nurture', 'parked', 'disqualified']) {
+      expect(headings.join(' | '), `no column headed ${sw.stage[stage]}`)
+        .toContain(sw.stage[stage])
+    }
+    expect(errors).toEqual([])
+  })
+
   it('clicking a page number does not throw', async () => {
     const wrapper = await mountView(() => import('../../src/views/leads/LeadListView.vue'))
     const pageButtons = wrapper.findAll('.pager-btn')

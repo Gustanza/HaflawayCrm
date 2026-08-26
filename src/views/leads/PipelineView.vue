@@ -45,7 +45,7 @@ const { items, loading, loaded, error, load } = useCollection(
 )
 
 /**
- * How many cards a column shows before asking. Eight columns × 12 keeps the board scannable
+ * How many cards a column shows before asking. Eleven columns × 12 keeps the board scannable
  * on a laptop; the cut is by `priorityScore`, so what is hidden is by definition the least
  * urgent work in that stage.
  */
