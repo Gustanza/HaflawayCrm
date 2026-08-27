@@ -676,3 +676,80 @@ describe('audit log', () => {
     await assertFails(setDoc(doc(await asAdmin(), 'auditLogs/x2'), { actorId: 'admin1' }))
   })
 })
+
+/**
+ * The campaign spend ledger — the write path behind "Record spend" on CampaignsView.
+ *
+ * This is the ONLY source of truth for what a campaign cost, and therefore for per-campaign
+ * CAC, CPL and ROAS. Until that form existed the ledger had a single writer (the seed
+ * script), so these tests pin the exact payload the UI now sends rather than a convenient
+ * approximation of it.
+ */
+describe('campaign spend ledger — the CAC input path', () => {
+  // Exactly what CampaignsView.saveSpend() writes.
+  const entry = (enteredBy) => ({
+    dayKey: '2026-08-14',
+    weekKey: '2026-W33',
+    monthKey: '2026-08',
+    spentOn: new Date('2026-08-14T12:00:00Z'),
+    amountMinor: 25000000,
+    currency: 'TZS',
+    source: 'manual',
+    enteredBy,
+    createdAt: serverTimestamp(),
+  })
+
+  beforeEach(async () => {
+    await seed('campaigns/c1', {
+      orgId: ORG, name: 'IG August', channel: 'instagram', budgetMinor: 50000000,
+    })
+  })
+
+  it('lets finance append a spend entry', async () => {
+    const db = await asFinance('finance1')
+    await assertSucceeds(addDoc(collection(db, 'campaigns/c1/spend'), entry('finance1')))
+  })
+
+  it('denies an agent appending spend', async () => {
+    const db = await asAgent('agent1')
+    await assertFails(addDoc(collection(db, 'campaigns/c1/spend'), entry('agent1')))
+  })
+
+  it('denies a manager appending spend — they may read costs, not write them', async () => {
+    const db = await asManager('manager1')
+    await assertFails(addDoc(collection(db, 'campaigns/c1/spend'), entry('manager1')))
+  })
+
+  it('denies posting an entry in somebody else\'s name', async () => {
+    // enteredBy is the audit trail for money. It must be the caller.
+    const db = await asFinance('finance1')
+    await assertFails(addDoc(collection(db, 'campaigns/c1/spend'), entry('finance2')))
+  })
+
+  it('is append-only: no edit, no delete', async () => {
+    await seed('campaigns/c1/spend/s1', { ...entry('finance1'), createdAt: new Date() })
+    const db = await asFinance('finance1')
+    await assertFails(updateDoc(doc(db, 'campaigns/c1/spend/s1'), { amountMinor: 1 }))
+    await assertFails(deleteDoc(doc(db, 'campaigns/c1/spend/s1')))
+  })
+})
+
+/**
+ * An agent must be able to attribute a lead to a campaign WITHOUT being able to see what the
+ * campaign cost. That is the whole reason campaignsPublic exists (§7.2) and the reason the
+ * quick-add picker reads it instead of `campaigns`.
+ */
+describe('agents can attribute a lead to a campaign without seeing its cost', () => {
+  beforeEach(async () => {
+    await seed('campaigns/c1', { orgId: ORG, name: 'IG August', channel: 'instagram', budgetMinor: 50000000 })
+    await seed('campaignsPublic/c1', { orgId: ORG, name: 'IG August', channel: 'instagram', status: 'active' })
+  })
+
+  it('allows an agent to read the redacted campaign list', async () => {
+    await assertSucceeds(getDoc(doc(await asAgent('agent1'), 'campaignsPublic/c1')))
+  })
+
+  it('still denies the agent the budget behind it', async () => {
+    await assertFails(getDoc(doc(await asAgent('agent1'), 'campaigns/c1')))
+  })
+})

@@ -23,7 +23,8 @@
     "optional": "Optional",
     "language": "Language",
     "swahili": "Kiswahili",
-    "english": "English"
+    "english": "English",
+    "select": "Select..."
   },
   "auth": {
     "signIn": "Sign in",
@@ -228,7 +229,10 @@
     "duplicate": "That number is already in the system.",
     "duplicateTitle": "This number is already here",
     "duplicateBody": "A lead with this number already exists. Do not add them twice — open the existing one.",
-    "openExisting": "Open the existing lead"
+    "openExisting": "Open the existing lead",
+    "campaign": "Campaign",
+    "noCampaign": "No campaign",
+    "campaignHint": "Set once, at capture. It cannot be changed later."
   },
   "leads": {
     "showing": "Showing {shown} of {total}",
@@ -362,7 +366,11 @@
     "added": "Campaign added",
     "name": "Name",
     "channel": "Channel",
-    "budget": "Budget"
+    "budget": "Budget",
+    "addSpend": "Record spend",
+    "addSpendHint": "Every entry is permanent. To correct one, post another.",
+    "spentOn": "Date",
+    "spendAdded": "Spend recorded"
   },
   "expenses": {
     "subtitle": "The expense ledger",

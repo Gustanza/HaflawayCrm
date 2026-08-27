@@ -20,6 +20,8 @@ import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth.js'
 import { useUiStore } from '@/stores/ui.js'
 import { createLead, checkPhoneAvailable, DuplicateLeadError, InvalidPhoneError } from '@/services/leads.service.js'
+import { campaignOptionsQuery } from '@/services/queries.js'
+import { useCollection } from '@/composables/useCollection.js'
 import { formatAsYouType, normalizePhone } from '@/domain/phone.js'
 import { EVENT_TYPES, LEAD_SOURCES } from '@/domain/taxonomies.js'
 
@@ -35,7 +37,23 @@ const displayName = ref('')
 const eventType = ref('harusi')
 const eventDate = ref('')
 const source = ref('whatsapp')
+const campaignId = ref('')
 const saving = ref(false)
+
+/**
+ * Which campaign brought this lead in. Reads `campaignsPublic` (name and channel only, never
+ * the budget - §7.2), so an AGENT can attribute a lead without being able to see cost data.
+ *
+ * Captured HERE and nowhere else: attribution is first-touch and frozen at creation (P5), so
+ * there is deliberately no way to set it later. Optional - a lead from a committee visit
+ * belongs to no campaign, and forcing a choice would produce fiction.
+ */
+const { items: campaignOptions } = useCollection(
+  () => campaignOptionsQuery({ uid: auth.uid, role: auth.role, orgId: auth.orgId, teamId: auth.teamId }),
+)
+const activeCampaigns = computed(() =>
+  campaignOptions.value.filter((c) => c.status !== 'archived'),
+)
 
 /** Result of the live availability probe. Advisory only — the transaction is the lock. */
 const duplicate = ref(null)
@@ -88,6 +106,7 @@ async function save() {
         eventDate: eventDate.value ? new Date(eventDate.value) : null,
         source: source.value,
         channel: source.value,
+        campaignId: campaignId.value || null,
         // A brand-new lead is due for a first call now — otherwise it is invisible to the
         // work queue, which is where it needs to appear (§10.3).
         nextActionAt: new Date(),
@@ -227,6 +246,20 @@ onMounted(() => phoneInput.value?.focus())
           </button>
         </div>
       </fieldset>
+
+      <div v-if="activeCampaigns.length">
+        <label for="qa-campaign" class="field-label">
+          {{ $t('quickAdd.campaign') }}
+          <span class="font-normal text-slate-400">· {{ $t('common.optional') }}</span>
+        </label>
+        <select id="qa-campaign" v-model="campaignId" class="field-input">
+          <option value="">{{ $t('quickAdd.noCampaign') }}</option>
+          <option v-for="c in activeCampaigns" :key="c.id" :value="c.id">
+            {{ c.name }}{{ c.channel ? ` - ${$t(`source.${c.channel}`)}` : '' }}
+          </option>
+        </select>
+        <p class="mt-1.5 text-xs text-slate-500">{{ $t('quickAdd.campaignHint') }}</p>
+      </div>
 
       <div class="flex gap-2 pt-1">
         <button type="button" class="btn-secondary flex-1" @click="router.back()">

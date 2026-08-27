@@ -15,7 +15,7 @@
  */
 import { computed, ref, shallowRef, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { collection, doc, writeBatch, serverTimestamp } from 'firebase/firestore'
+import { addDoc, collection, doc, writeBatch, serverTimestamp } from 'firebase/firestore'
 import { getDb } from '@/firebase/app.js'
 import { useAuthStore } from '@/stores/auth.js'
 import { useUiStore } from '@/stores/ui.js'
@@ -25,6 +25,7 @@ import { campaignsQuery, leadsQuery, fetchCampaignSpend } from '@/services/queri
 import { formatMoney, formatPercent, divideMinor, toMinor } from '@/domain/money.js'
 import { cacBy, revenueMinor, isWon, LOW_CONFIDENCE_N } from '@/domain/metrics.js'
 import { LEAD_SOURCES } from '@/domain/taxonomies.js'
+import { periodKeys } from '@/domain/periods.js'
 import PageHeader from '@/components/layout/PageHeader.vue'
 import LoadingRows from '@/components/ui/LoadingRows.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
@@ -103,6 +104,69 @@ async function saveCampaign() {
     ui.error(t('errors.write.permissionDenied'))
   } finally {
     saving.value = false
+  }
+}
+
+/**
+ * Recording what a campaign actually cost.
+ *
+ * Writes an entry to `campaigns/{id}/spend`, which is the ONLY source of truth for spend -
+ * `campaign.budgetMinor` is a plan and `spendToDateMinor` is decorative. Until this existed
+ * the ledger had exactly one writer, the seed script, so a real deployment could never
+ * produce a per-campaign CAC at all.
+ *
+ * APPEND-ONLY (P4), enforced by firestore.rules: no update, no delete. A mistake is
+ * corrected by posting another entry, not by editing this one. The date is free so you can
+ * back-date yesterday's Facebook receipt, and `periodKeys` stamps the month FROM THAT DATE -
+ * booking it against the month the money was actually spent, not the month it was typed in.
+ */
+const showSpendForm = ref(false)
+const spendCampaignId = ref('')
+const spendAmount = ref('')
+const spendDate = ref(new Date().toISOString().slice(0, 10))
+const savingSpend = ref(false)
+
+const spendAmountMinor = computed(() =>
+  spendAmount.value.trim() ? toMinor(spendAmount.value) : null,
+)
+const canSaveSpend = computed(
+  () =>
+    !savingSpend.value &&
+    spendCampaignId.value !== '' &&
+    spendAmountMinor.value !== null &&
+    spendAmountMinor.value > 0 &&
+    spendDate.value !== '',
+)
+
+async function saveSpend() {
+  if (!canSaveSpend.value) return
+  savingSpend.value = true
+  try {
+    const db = await getDb()
+    // Midday, so a timezone shift cannot move the entry into the previous or next day and
+    // therefore into the wrong monthKey at a month boundary.
+    const spentOn = new Date(`${spendDate.value}T12:00:00`)
+    await addDoc(collection(db, 'campaigns', spendCampaignId.value, 'spend'), {
+      ...periodKeys(spentOn),
+      spentOn,
+      amountMinor: spendAmountMinor.value,
+      currency: 'TZS',
+      source: 'manual',
+      // firestore.rules requires this to equal the caller's uid - an entry cannot be
+      // posted in somebody else's name.
+      enteredBy: auth.uid,
+      createdAt: serverTimestamp(),
+    })
+
+    ui.success(t('campaigns.spendAdded'))
+    spendAmount.value = ''
+    showSpendForm.value = false
+    // Re-read the ledger so the row's spend, CPL, CAC and ROAS update immediately.
+    campaignSpend.value = await fetchCampaignSpend(user.value, campaigns.value.map((c) => c.id))
+  } catch {
+    ui.error(t('errors.write.permissionDenied'))
+  } finally {
+    savingSpend.value = false
   }
 }
 
@@ -237,13 +301,73 @@ const totals = computed(() => {
   <div>
     <PageHeader :title="$t('nav.campaigns')" :subtitle="$t('campaigns.subtitle')">
       <template v-if="auth.can.editCosts" #actions>
-        <button type="button" class="btn-primary text-sm" @click="showForm = !showForm">
+        <button
+          type="button"
+          class="btn-secondary text-sm"
+          :disabled="!campaigns.length"
+          @click="showSpendForm = !showSpendForm; showForm = false"
+        >
+          + {{ $t('campaigns.addSpend') }}
+        </button>
+        <button
+          type="button"
+          class="btn-primary text-sm"
+          @click="showForm = !showForm; showSpendForm = false"
+        >
           + {{ $t('campaigns.add') }}
         </button>
       </template>
     </PageHeader>
 
     <div class="px-4 sm:px-6 py-4 sm:py-6">
+    <!-- Recording real spend. Append-only: this posts a new ledger entry every time. -->
+    <section v-if="showSpendForm" class="card p-4 mb-4">
+      <h2 class="font-medium text-slate-900 mb-1">{{ $t('campaigns.addSpend') }}</h2>
+      <p class="text-sm text-slate-600 mb-3">{{ $t('campaigns.addSpendHint') }}</p>
+
+      <div class="space-y-3">
+        <div>
+          <label for="s-campaign" class="field-label">{{ $t('campaigns.name') }}</label>
+          <select id="s-campaign" v-model="spendCampaignId" class="field-input">
+            <option value="">{{ $t('common.select') }}</option>
+            <option v-for="c in campaigns" :key="c.id" :value="c.id">{{ c.name }}</option>
+          </select>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label for="s-amount" class="field-label">{{ $t('campaigns.spend') }}</label>
+            <input
+              id="s-amount"
+              v-model="spendAmount"
+              type="text"
+              inputmode="decimal"
+              class="field-input"
+              placeholder="250000"
+            />
+          </div>
+          <div>
+            <label for="s-date" class="field-label">{{ $t('campaigns.spentOn') }}</label>
+            <input id="s-date" v-model="spendDate" type="date" class="field-input" />
+          </div>
+        </div>
+
+        <div class="flex gap-2">
+          <button type="button" class="btn-secondary flex-1" @click="showSpendForm = false">
+            {{ $t('common.cancel') }}
+          </button>
+          <button
+            type="button"
+            class="btn-primary flex-1"
+            :disabled="!canSaveSpend"
+            @click="saveSpend"
+          >
+            {{ savingSpend ? $t('common.loading') : $t('common.save') }}
+          </button>
+        </div>
+      </div>
+    </section>
+
     <section v-if="showForm" class="card p-4 mb-4">
       <h2 class="font-medium text-slate-900 mb-3">{{ $t('campaigns.add') }}</h2>
 

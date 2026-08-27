@@ -23,7 +23,8 @@
     "optional": "Si lazima",
     "language": "Lugha",
     "swahili": "Kiswahili",
-    "english": "Kiingereza"
+    "english": "Kiingereza",
+    "select": "Chagua..."
   },
   "auth": {
     "signIn": "Ingia",
@@ -228,7 +229,10 @@
     "duplicate": "Namba hii tayari ipo kwenye mfumo.",
     "duplicateTitle": "Namba hii tayari ipo",
     "duplicateBody": "Mteja mwenye namba hii tayari yupo. Usimuongeze mara mbili — fungua aliyepo.",
-    "openExisting": "Fungua aliyepo"
+    "openExisting": "Fungua aliyepo",
+    "campaign": "Kampeni",
+    "noCampaign": "Hakuna kampeni",
+    "campaignHint": "Imechaguliwa mara moja tu, wakati wa kusajili. Haiwezi kubadilishwa baadaye."
   },
   "leads": {
     "showing": "Inaonyesha {shown} kati ya {total}",
@@ -362,7 +366,11 @@
     "name": "Jina",
     "channel": "Njia",
     "budget": "Bajeti",
-    "teamScopeNote": "Unaona matumizi ya matangazo yote, lakini wateja wa timu yako pekee."
+    "teamScopeNote": "Unaona matumizi ya matangazo yote, lakini wateja wa timu yako pekee.",
+    "addSpend": "Weka matumizi",
+    "addSpendHint": "Kila kiingizo ni cha kudumu. Kurekebisha, weka kiingizo kingine.",
+    "spentOn": "Tarehe",
+    "spendAdded": "Matumizi yamewekwa"
   },
   "expenses": {
     "subtitle": "Daftari la matumizi",
