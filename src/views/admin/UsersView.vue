@@ -88,7 +88,7 @@ const toggleActive = (user) =>
       :subtitle="$t('users.subtitle', { count: items.length })"
     />
 
-    <div class="px-4 sm:px-6 py-4 sm:py-6 max-w-3xl">
+    <div class="px-4 sm:px-6 py-4 sm:py-6">
 
     <!-- Not a footnote: the single most misleading thing this screen could do is imply a
          role change is live when the claim has not been synced. -->
@@ -108,58 +108,70 @@ const toggleActive = (user) =>
     </div>
 
     <template v-else>
-    <ul class="space-y-2">
-      <li
-        v-for="user in pager.items.value"
-        :key="user.id"
-        class="card p-4"
-        :class="user.isActive === false ? 'opacity-60' : ''"
-      >
-        <div class="flex items-start justify-between gap-3">
-          <div class="min-w-0">
-            <p class="font-medium text-slate-900 truncate">{{ user.displayName }}</p>
-            <p class="text-sm text-slate-500 truncate">{{ user.email }}</p>
-            <p v-if="user.teamId" class="text-xs text-slate-400">{{ user.teamId }}</p>
-          </div>
-          <span
-            v-if="user.isActive === false"
-            class="badge bg-slate-200 text-slate-600 ring-slate-300 shrink-0"
+    <div class="data-table-wrap">
+      <table class="data-table min-w-[52rem]">
+        <thead>
+          <tr>
+            <th>{{ $t('leads.name') }}</th>
+            <th>{{ $t('settings.role') }}</th>
+            <th>{{ $t('users.status') }}</th>
+            <th class="text-right">{{ $t('leads.actions') }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr
+            v-for="user in pager.items.value"
+            :key="user.id"
+            :class="user.isActive === false ? 'opacity-60' : ''"
           >
-            {{ $t('users.inactive') }}
-          </span>
-        </div>
-
-        <div class="mt-3 flex flex-wrap gap-1.5">
-          <button
-            v-for="role in ROLES"
-            :key="role"
-            type="button"
-            class="rounded-full px-3 py-1.5 text-xs font-medium ring-1 ring-inset ring-slate-400
-                   bg-white text-slate-700 data-[on=true]:bg-brand-600 data-[on=true]:text-white
-                   data-[on=true]:ring-brand-600 disabled:opacity-50"
-            :data-on="user.role === role"
-            :disabled="pending.has(user.id) || user.id === auth.uid"
-            @click="setRole(user, role)"
-          >
-            {{ $t(`role.${role}`) }}
-          </button>
-        </div>
-
-        <button
-          type="button"
-          class="mt-2 text-sm font-medium"
-          :class="user.isActive === false ? 'text-emerald-700' : 'text-rose-700'"
-          :disabled="pending.has(user.id) || user.id === auth.uid"
-          @click="toggleActive(user)"
-        >
-          {{ user.isActive === false ? $t('users.reactivate') : $t('users.deactivate') }}
-        </button>
-
-        <p v-if="user.id === auth.uid" class="mt-1 text-xs text-slate-400">
-          {{ $t('users.cannotEditSelf') }}
-        </p>
-      </li>
-    </ul>
+            <td>
+              <p class="font-medium text-slate-900">{{ user.displayName }}</p>
+              <p class="text-xs text-slate-500">{{ user.email }}</p>
+              <p v-if="user.teamId" class="text-xs text-slate-400">{{ user.teamId }}</p>
+            </td>
+            <td>
+              <div class="flex flex-wrap gap-1.5">
+                <button
+                  v-for="role in ROLES"
+                  :key="role"
+                  type="button"
+                  class="rounded-full px-3 py-1.5 text-xs font-medium ring-1 ring-inset ring-slate-400
+                         bg-white text-slate-700 data-[on=true]:bg-brand-600 data-[on=true]:text-white
+                         data-[on=true]:ring-brand-600 disabled:opacity-50"
+                  :data-on="user.role === role"
+                  :disabled="pending.has(user.id) || user.id === auth.uid"
+                  @click="setRole(user, role)"
+                >
+                  {{ $t(`role.${role}`) }}
+                </button>
+              </div>
+            </td>
+            <td>
+              <span
+                v-if="user.isActive === false"
+                class="badge bg-slate-200 text-slate-600 ring-slate-300"
+              >
+                {{ $t('users.inactive') }}
+              </span>
+            </td>
+            <td class="text-right">
+              <button
+                type="button"
+                class="text-sm font-medium"
+                :class="user.isActive === false ? 'text-emerald-700' : 'text-rose-700'"
+                :disabled="pending.has(user.id) || user.id === auth.uid"
+                @click="toggleActive(user)"
+              >
+                {{ user.isActive === false ? $t('users.reactivate') : $t('users.deactivate') }}
+              </button>
+              <p v-if="user.id === auth.uid" class="mt-1 text-xs text-slate-400">
+                {{ $t('users.cannotEditSelf') }}
+              </p>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
 
     <PaginationBar
       :page="pager.page.value"

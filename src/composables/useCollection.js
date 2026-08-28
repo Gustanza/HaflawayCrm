@@ -21,20 +21,36 @@ const withId = (snap) => ({ id: snap.id, ...snap.data() })
 /**
  * Load a collection once, or subscribe to it.
  *
- * @param buildQuery  async () => Query — usually a builder from services/queries.js
+ * @param buildQuery  async (after?) => Query — usually a builder from services/queries.js.
+ *                    The optional `after` cursor is only ever passed by loadMore() below;
+ *                    a builder that ignores its argument (every existing one) keeps working
+ *                    unchanged.
  * @param options.live      subscribe instead of one-shot (default false)
  * @param options.immediate load on creation (default true)
  * @param options.map       transform each document
+ * @param options.pageSize  the LIMIT the query itself uses. Supplying it is what turns on
+ *                          `hasMore`/`loadMore()` — omitted, this composable behaves exactly
+ *                          as before. It cannot be inferred from the query object itself, so
+ *                          the caller states it explicitly (and must keep it in sync with
+ *                          whatever `max`/`limit` the query builder was actually given).
  */
-export function useCollection(buildQuery, { live = false, immediate = true, map = withId } = {}) {
+export function useCollection(
+  buildQuery,
+  { live = false, immediate = true, map = withId, pageSize = null } = {},
+) {
   const items = shallowRef([])
   const loading = ref(false)
+  const loadingMore = ref(false)
   const error = ref(null)
   const loaded = ref(false)
   const fromCache = ref(false)
+  const hasMore = ref(false)
 
   const ui = useUiStore()
   let unsubscribe = null
+  // The raw last doc from the most recent fetch — a cursor, never exposed via `items`
+  // (which stays the mapped `{id, ...data}` shape every caller already expects).
+  let lastDoc = null
 
   /** True only once we know there is genuinely nothing — not while still loading. */
   const isEmpty = computed(() => loaded.value && items.value.length === 0)
@@ -44,9 +60,16 @@ export function useCollection(buildQuery, { live = false, immediate = true, map 
     unsubscribe = null
   }
 
+  /** An exact-cap fetch means there might be more — Firestore has no cheap total count. */
+  function updateHasMore(fetchedCount) {
+    hasMore.value = pageSize != null && fetchedCount === pageSize
+  }
+
   async function load() {
     loading.value = true
     error.value = null
+    lastDoc = null
+    hasMore.value = false
     stop()
 
     try {
@@ -68,6 +91,11 @@ export function useCollection(buildQuery, { live = false, immediate = true, map 
               ui.reportSnapshot(snap)
               fromCache.value = snap.metadata.fromCache
               items.value = snap.docs.map(map)
+              // Meaningful even though loadMore() refuses to run on a live query (see
+              // there): an exact-cap snapshot still means more COULD exist beyond the
+              // limit, and a view is entitled to say so even if it can't fetch them.
+              // `lastDoc` deliberately stays null — a live listener has no stable cursor.
+              updateHasMore(snap.docs.length)
               loaded.value = true
               loading.value = false
               if (!settled) {
@@ -90,6 +118,8 @@ export function useCollection(buildQuery, { live = false, immediate = true, map 
         ui.reportSnapshot(snap)
         fromCache.value = snap.metadata.fromCache
         items.value = snap.docs.map(map)
+        lastDoc = snap.docs[snap.docs.length - 1] ?? null
+        updateHasMore(snap.docs.length)
         loaded.value = true
       }
     } catch (err) {
@@ -104,12 +134,43 @@ export function useCollection(buildQuery, { live = false, immediate = true, map 
     }
   }
 
+  /**
+   * Fetch the next page and APPEND it — never available on a live listener (a live query
+   * has no stable cursor once anything in the collection changes underneath it) or before
+   * the first page has actually loaded.
+   */
+  async function loadMore() {
+    if (live || !hasMore.value || loadingMore.value || !lastDoc) return
+    loadingMore.value = true
+    error.value = null
+    try {
+      const q = await buildQuery(lastDoc)
+      if (!q) return
+      const snap = await getDocs(q)
+      ui.reportSnapshot(snap)
+      items.value = [...items.value, ...snap.docs.map(map)]
+      lastDoc = snap.docs[snap.docs.length - 1] ?? lastDoc
+      updateHasMore(snap.docs.length)
+    } catch (err) {
+      error.value = err
+      if (err?.code !== 'unavailable') {
+        // eslint-disable-next-line no-console
+        console.error('[useCollection loadMore]', err)
+      }
+    } finally {
+      loadingMore.value = false
+    }
+  }
+
   // Enforced here so no component can forget it (§11.3).
   onUnmounted(stop)
 
   if (immediate) load()
 
-  return { items, loading, error, loaded, isEmpty, fromCache, load, stop }
+  return {
+    items, loading, loadingMore, error, loaded, isEmpty, fromCache, hasMore,
+    load, loadMore, stop,
+  }
 }
 
 /** A single document. Same lifecycle guarantees. */

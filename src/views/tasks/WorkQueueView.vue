@@ -23,11 +23,15 @@ import { computed, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth.js'
 import { useCollection } from '@/composables/useCollection.js'
+import { useNow } from '@/composables/useNow.js'
+import { useUserNames } from '@/composables/useUserNames.js'
 import { leadsQuery } from '@/services/queries.js'
 import { priorityScore } from '@/domain/scoring.js'
 import { daysToEvent, toDate, dayKey } from '@/domain/periods.js'
+import { formatPhone, toTelLink, toWhatsAppLink } from '@/domain/phone.js'
 import PageHeader from '@/components/layout/PageHeader.vue'
-import LeadRow from '@/components/leads/LeadRow.vue'
+import StageBadge from '@/components/leads/StageBadge.vue'
+import EventCountdown from '@/components/leads/EventCountdown.vue'
 import LogActivityDialog from '@/components/leads/LogActivityDialog.vue'
 import LoadingRows from '@/components/ui/LoadingRows.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
@@ -35,7 +39,7 @@ import { usePagination } from '@/composables/usePagination.js'
 import PaginationBar from '@/components/ui/PaginationBar.vue'
 
 const auth = useAuthStore()
-const { t } = useI18n()
+const { t, locale } = useI18n()
 
 const user = computed(() => ({
   uid: auth.uid,
@@ -45,29 +49,51 @@ const user = computed(() => ({
   displayName: auth.displayName,
 }))
 
+const canSeeOtherOwners = computed(() => auth.can.viewAllLeads || auth.can.viewTeamLeads)
+
+// Must match `max` below. `order` makes which leads get fetched deterministic (most
+// recently active first) rather than arbitrary Firestore doc-ID order; the priorityScore
+// sort further down still decides what's shown FIRST among whatever this fetched.
+const QUEUE_PAGE_SIZE = 100
+
 // Live: this is the agent's home screen and a completed follow-up must disappear from it
-// immediately. One of the few places real-time earns its read cost (§11.3).
-const { items, loading, loaded, error, load } = useCollection(
-  () => leadsQuery(user.value, { leadStatus: 'open', max: 100 }),
-  { live: true },
+// immediately. One of the few places real-time earns its read cost (§11.3). That is also
+// why there is no "Load more" here unlike List/Pipeline — a live query has no stable
+// cursor once anything in the collection changes underneath it (useCollection.js's
+// loadMore() refuses to run on one) — but `hasMore` is still reported honestly below, so an
+// org-wide role that hits the cap is told rather than left to assume this is everyone.
+const { items, loading, loaded, error, load, hasMore } = useCollection(
+  () =>
+    leadsQuery(user.value, {
+      leadStatus: 'open',
+      max: QUEUE_PAGE_SIZE,
+      order: { field: 'updatedAt', direction: 'desc' },
+    }),
+  { live: true, pageSize: QUEUE_PAGE_SIZE },
 )
+
+const { nameFor } = useUserNames(() => (canSeeOtherOwners.value ? auth.orgId : null))
+
+// Ticks on its own — see useNow.js's docstring for why the buckets below would otherwise
+// stay silently stale between Firestore writes, on the one screen that can least afford it.
+const now = useNow()
 
 /** Sorted by the score the agent should actually act on. */
 const ranked = computed(() =>
   [...items.value]
-    .map((lead) => ({ lead, score: priorityScore(lead) }))
+    .map((lead) => ({ lead, score: priorityScore(lead, now.value) }))
     .sort((a, b) => b.score - a.score)
     .map((entry) => entry.lead),
 )
 
-const today = computed(() => dayKey(new Date()))
+const today = computed(() => dayKey(now.value))
 
 function bucketOf(lead) {
   const next = toDate(lead.nextActionAt)
   if (!next) return 'upcoming'
-  if (next.getTime() < Date.now()) return 'overdue'
+  if (next.getTime() < now.value.getTime()) return 'overdue'
   if (dayKey(next) === today.value) return 'today'
-  const days = daysToEvent(lead.nextActionAt)
+  const days = daysToEvent(lead.nextActionAt, now.value)
   return days !== null && days <= 7 ? 'upcoming' : 'later'
 }
 
@@ -152,6 +178,48 @@ const dueCount = computed(
 
 const logTarget = ref(null)
 const openLog = (lead) => (logTarget.value = lead)
+
+/** Context-appropriate "Due" cell — a bare time in Today, a full date further out. */
+const timeFormat = computed(
+  () =>
+    new Intl.DateTimeFormat(locale.value === 'sw' ? 'sw-TZ' : 'en-GB', {
+      hour: '2-digit',
+      minute: '2-digit',
+      timeZone: 'Africa/Dar_es_Salaam',
+    }),
+)
+const dateTimeFormat = computed(
+  () =>
+    new Intl.DateTimeFormat(locale.value === 'sw' ? 'sw-TZ' : 'en-GB', {
+      day: 'numeric',
+      month: 'short',
+      hour: '2-digit',
+      minute: '2-digit',
+      timeZone: 'Africa/Dar_es_Salaam',
+    }),
+)
+
+function dueLabel(lead, sectionId) {
+  const next = toDate(lead.nextActionAt)
+  if (!next) return '—'
+  if (sectionId === 'overdue') {
+    const days = daysToEvent(lead.nextActionAt, now.value)
+    const overdueBy = days === null ? null : Math.abs(days)
+    return overdueBy ? t('queue.overdueBy', { count: overdueBy }) : t('queue.overdueNow')
+  }
+  if (sectionId === 'today') return timeFormat.value.format(next)
+  return dateTimeFormat.value.format(next)
+}
+
+function telLink(lead) {
+  return toTelLink(lead.primaryPhoneNormalized || lead.primaryPhone)
+}
+function whatsappLink(lead) {
+  return toWhatsAppLink(
+    lead.primaryPhoneNormalized || lead.primaryPhone,
+    t('lead.whatsappGreeting', { name: lead.displayName ?? '' }),
+  )
+}
 </script>
 
 <template>
@@ -161,6 +229,11 @@ const openLog = (lead) => (logTarget.value = lead)
         {{ $t('queue.subtitle', { count: dueCount }) }}
         <span v-if="later.length" class="text-slate-400">
           · {{ $t('queue.scheduledLater', { count: later.length }) }}
+        </span>
+        <!-- Honest about the cap: a live query has no cursor to fetch past it with (see
+             the note in the script above), so this can only say so, not fix itself. -->
+        <span v-if="hasMore" class="text-amber-600">
+          · {{ $t('queue.mayBeMore') }}
         </span>
       </template>
       <template v-if="auth.can.createLead" #actions>
@@ -204,11 +277,81 @@ const openLog = (lead) => (logTarget.value = lead)
           {{ s.label }}
         </h2>
 
-        <!-- One column on a phone; two from 1024px, three from 1536px. Row-major, so the
-             priority order still reads 1,2 / 3,4 rather than down each column. A ranked
-             list survives that; it would not survive column-major flow. -->
-        <div class="grid gap-2 lg:grid-cols-2 2xl:grid-cols-3 items-start">
-          <LeadRow v-for="lead in s.shown" :key="lead.id" :lead="lead" @log="openLog" />
+        <div class="data-table-wrap">
+          <table class="data-table min-w-[46rem]">
+            <thead>
+              <tr>
+                <th>{{ $t('leads.name') }}</th>
+                <th>{{ $t('leads.event') }}</th>
+                <th>{{ $t('leads.stage') }}</th>
+                <th v-if="canSeeOtherOwners">{{ $t('leads.owner') }}</th>
+                <th>{{ $t('queue.due') }}</th>
+                <th>{{ $t('leads.phone') }}</th>
+                <th class="text-right">{{ $t('leads.actions') }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="lead in s.shown" :key="lead.id" :class="s.id === 'overdue' ? 'bg-rose-50/40' : ''">
+                <td>
+                  <RouterLink
+                    :to="{ name: 'lead-detail', params: { id: lead.id } }"
+                    class="font-medium text-slate-900 hover:text-brand-700"
+                  >
+                    {{ lead.displayName || $t('lead.unnamed') }}
+                  </RouterLink>
+                </td>
+                <td>
+                  <EventCountdown :event-date="lead.eventDate" :event-type="lead.eventType" compact />
+                </td>
+                <td><StageBadge :stage="lead.stage" /></td>
+                <td v-if="canSeeOtherOwners" class="text-slate-600">{{ nameFor(lead.ownerId) }}</td>
+                <td :class="s.id === 'overdue' ? 'text-rose-700 font-medium' : 'text-slate-600'">
+                  {{ dueLabel(lead, s.id) }}
+                </td>
+                <td class="text-slate-600 tabular-nums">
+                  {{ formatPhone(lead.primaryPhoneNormalized || lead.primaryPhone) }}
+                </td>
+                <td class="text-right">
+                  <div class="flex items-center justify-end gap-1">
+                    <a
+                      v-if="telLink(lead)"
+                      :href="telLink(lead)"
+                      class="icon-btn"
+                      :aria-label="`${$t('lead.call')} ${lead.displayName}`"
+                    >
+                      <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                           stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2 4.2 2 2 0 0 1 4 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8.1 9.9a16 16 0 0 0 6 6l1.3-1.1a2 2 0 0 1 2.1-.5c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2z" />
+                      </svg>
+                    </a>
+                    <a
+                      v-if="whatsappLink(lead)"
+                      :href="whatsappLink(lead)"
+                      target="_blank"
+                      rel="noopener"
+                      class="icon-btn"
+                      :aria-label="`${$t('lead.whatsapp')} ${lead.displayName}`"
+                    >
+                      <svg class="size-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                        <path d="M12 2a10 10 0 0 0-8.6 15l-1.3 4.7 4.8-1.3A10 10 0 1 0 12 2zm0 18a8 8 0 0 1-4.1-1.1l-.3-.2-2.9.8.8-2.8-.2-.3A8 8 0 1 1 12 20zm4.4-5.9c-.2-.1-1.4-.7-1.6-.8s-.4-.1-.5.1l-.8.9c-.1.2-.3.2-.5.1a6.6 6.6 0 0 1-3.2-2.8c-.1-.2 0-.4.1-.5l.4-.5.2-.4v-.4l-.7-1.7c-.2-.4-.4-.4-.5-.4h-.5a1 1 0 0 0-.7.3 3 3 0 0 0-.9 2.2 5.2 5.2 0 0 0 1.1 2.7 11.9 11.9 0 0 0 4.6 4 5.3 5.3 0 0 0 3.2.5 2.7 2.7 0 0 0 1.7-1.2 2.1 2.1 0 0 0 .2-1.2c0-.1-.2-.2-.4-.3z" />
+                      </svg>
+                    </a>
+                    <button
+                      type="button"
+                      class="icon-btn"
+                      :aria-label="`${$t('lead.log')} ${lead.displayName}`"
+                      @click="openLog(lead)"
+                    >
+                      <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                           stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+                      </svg>
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
         </div>
 
         <!-- Compact: the section heading already carries the label and the true total,

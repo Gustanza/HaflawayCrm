@@ -21,6 +21,8 @@ import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth.js'
 import { useUiStore } from '@/stores/ui.js'
 import { useCollection } from '@/composables/useCollection.js'
+import { useNow } from '@/composables/useNow.js'
+import { useUserNames } from '@/composables/useUserNames.js'
 import { leadsQuery } from '@/services/queries.js'
 import { changeStage } from '@/services/leads.service.js'
 import { BOARD_ORDER, validateTransition, canTransition, nextStages } from '@/domain/stages.js'
@@ -40,9 +42,27 @@ const user = computed(() => ({
   uid: auth.uid, role: auth.role, orgId: auth.orgId, teamId: auth.teamId,
 }))
 
-const { items, loading, loaded, error, load } = useCollection(
-  () => leadsQuery(user.value, { max: 200 }),
+const canSeeOtherOwners = computed(() => auth.can.viewAllLeads || auth.can.viewTeamLeads)
+
+// Must match the `max` given to leadsQuery() below — see the identical note in
+// LeadListView.vue. `order` makes which leads get fetched deterministic; the per-stage
+// priorityScore sort further down still decides ordering WITHIN a column.
+const BOARD_PAGE_SIZE = 200
+const { items, loading, loadingMore, loaded, error, load, loadMore, hasMore } = useCollection(
+  (after) =>
+    leadsQuery(user.value, {
+      max: BOARD_PAGE_SIZE,
+      after,
+      order: { field: 'updatedAt', direction: 'desc' },
+    }),
+  { pageSize: BOARD_PAGE_SIZE },
 )
+
+const { nameFor } = useUserNames(() => (canSeeOtherOwners.value ? auth.orgId : null))
+
+// Ticks on its own — see useNow.js. Without it, a card's priorityScore (and therefore its
+// position in the column) is frozen at whatever it was when this view last re-rendered.
+const now = useNow()
 
 /**
  * How many cards a column shows before asking. Eleven columns × 12 keeps the board scannable
@@ -55,11 +75,28 @@ const COLUMN_PAGE = 12
 // already in memory from the single query — this is a rendering cap, not another read.
 const revealed = reactive(Object.fromEntries(BOARD_ORDER.map((stage) => [stage, COLUMN_PAGE])))
 
+/**
+ * One pass over `items`, not eleven. This used to be
+ * `BOARD_ORDER.map(stage => items.value.filter(l => l.stage === stage).sort(...))` — every
+ * one of the 11 stages re-scanned the WHOLE fetched set to pull out its own handful of
+ * leads, on every recompute (which now includes every useNow() tick, not just data
+ * changes). Grouping once is the same O(n) work `.filter()` alone would have cost for a
+ * SINGLE stage, with all 11 stages coming out of it instead of just one.
+ */
+const byStage = computed(() => {
+  const groups = new Map(BOARD_ORDER.map((stage) => [stage, []]))
+  for (const lead of items.value) {
+    groups.get(lead.stage)?.push(lead)
+  }
+  for (const leads of groups.values()) {
+    leads.sort((a, b) => priorityScore(b, now.value) - priorityScore(a, now.value))
+  }
+  return groups
+})
+
 const columns = computed(() =>
   BOARD_ORDER.map((stage) => {
-    const leads = items.value
-      .filter((l) => l.stage === stage)
-      .sort((a, b) => priorityScore(b) - priorityScore(a))
+    const leads = byStage.value.get(stage) ?? []
     const cap = revealed[stage]
     return {
       stage,
@@ -145,7 +182,7 @@ function onDrop(stage) {
         <section
           v-for="column in columns"
           :key="column.stage"
-          class="w-64 shrink-0 rounded-xl bg-slate-100/70 p-2 transition-colors"
+          class="w-72 shrink-0 rounded-xl bg-slate-100/70 p-2 transition-colors"
           :class="
             legalTargets.includes(column.stage)
               ? 'ring-2 ring-brand-500 bg-brand-50'
@@ -170,40 +207,58 @@ function onDrop(stage) {
           </header>
 
           <div class="space-y-2">
-            <article
-              v-for="lead in column.leads"
-              :key="lead.id"
-              class="card p-3 cursor-grab active:cursor-grabbing"
-              draggable="true"
-              @dragstart="dragging = lead"
-              @dragend="dragging = null"
-            >
-              <RouterLink
-                :to="{ name: 'lead-detail', params: { id: lead.id } }"
-                class="block text-sm font-medium text-slate-900 hover:text-brand-700 truncate"
-              >
-                {{ lead.displayName || $t('lead.unnamed') }}
-              </RouterLink>
-
-              <div class="mt-1">
-                <EventCountdown :event-date="lead.eventDate" compact />
-              </div>
-
-              <p v-if="lead.dealValueMinor" class="mt-1 text-xs text-slate-600 tabular-nums">
-                {{ formatMoney(lead.dealValueMinor, lead.currency) }}
-              </p>
-
-              <!-- Touch path: dragging a card on a phone fights the scroll container. -->
-              <button
-                v-if="nextStages(lead.stage).length"
-                type="button"
-                class="mt-2 w-full rounded-lg px-2 py-1.5 text-xs font-medium text-brand-700
-                       ring-1 ring-inset ring-brand-200 hover:bg-brand-50"
-                @click="moveTarget = lead"
-              >
-                {{ $t('pipeline.move') }}
-              </button>
-            </article>
+            <table v-if="column.leads.length" class="data-table text-xs w-full">
+              <thead>
+                <tr>
+                  <th>{{ $t('leads.name') }}</th>
+                  <th class="text-right">{{ $t('leads.dealValue') }}</th>
+                  <th class="text-right"><span class="sr-only">{{ $t('leads.actions') }}</span></th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr
+                  v-for="lead in column.leads"
+                  :key="lead.id"
+                  class="cursor-grab active:cursor-grabbing"
+                  draggable="true"
+                  @dragstart="dragging = lead"
+                  @dragend="dragging = null"
+                >
+                  <td class="max-w-0">
+                    <RouterLink
+                      :to="{ name: 'lead-detail', params: { id: lead.id } }"
+                      class="block font-medium text-slate-900 hover:text-brand-700 truncate"
+                    >
+                      {{ lead.displayName || $t('lead.unnamed') }}
+                    </RouterLink>
+                    <div class="mt-0.5">
+                      <EventCountdown :event-date="lead.eventDate" compact />
+                    </div>
+                    <p v-if="canSeeOtherOwners" class="mt-0.5 text-slate-500 truncate">
+                      {{ nameFor(lead.ownerId) }}
+                    </p>
+                  </td>
+                  <td class="num align-top">
+                    {{ lead.dealValueMinor ? formatMoney(lead.dealValueMinor, lead.currency) : '—' }}
+                  </td>
+                  <td class="text-right align-top">
+                    <!-- Touch path: dragging a row on a phone fights the scroll container. -->
+                    <button
+                      v-if="nextStages(lead.stage).length"
+                      type="button"
+                      class="icon-btn"
+                      :aria-label="`${$t('pipeline.move')} ${lead.displayName}`"
+                      @click="moveTarget = lead"
+                    >
+                      <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                           stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M5 12h14M13 6l6 6-6 6" />
+                      </svg>
+                    </button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
 
             <p v-if="!column.total" class="px-2 py-6 text-center text-xs text-slate-400">
               {{ $t('pipeline.emptyColumn') }}
@@ -232,6 +287,14 @@ function onDrop(stage) {
           </div>
         </section>
       </div>
+    </div>
+
+    <!-- Distinct from each column's own "show more": this fetches leads the board hasn't
+         loaded from Firestore AT ALL yet, across every stage at once. -->
+    <div v-if="hasMore" class="mt-3 text-center">
+      <button type="button" class="btn-secondary" :disabled="loadingMore" @click="loadMore">
+        {{ loadingMore ? $t('common.loading') : $t('leads.loadMore') }}
+      </button>
     </div>
 
     <!-- Tap-to-move sheet -->

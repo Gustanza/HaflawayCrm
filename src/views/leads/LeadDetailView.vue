@@ -25,6 +25,7 @@ import { formatPhone, toTelLink, toWhatsAppLink } from '@/domain/phone.js'
 import { formatMoney, toMinor } from '@/domain/money.js'
 import { toDate } from '@/domain/periods.js'
 import { priorityScore } from '@/domain/scoring.js'
+import { useNow } from '@/composables/useNow.js'
 import StageBadge from '@/components/leads/StageBadge.vue'
 import EventCountdown from '@/components/leads/EventCountdown.vue'
 import LogActivityDialog from '@/components/leads/LogActivityDialog.vue'
@@ -35,6 +36,9 @@ const props = defineProps({ id: { type: String, required: true } })
 const auth = useAuthStore()
 const ui = useUiStore()
 const router = useRouter()
+// Ticks on its own — see useNow.js. Keeps the printed Priority figure honest if this page
+// is left open across a day boundary.
+const now = useNow()
 const { t, locale } = useI18n()
 
 const { item: lead, loading, loaded } = useDoc(async () => doc(await getDb(), 'leads', props.id))
@@ -242,7 +246,7 @@ const ACTIVITY_ICON = {
           </div>
           <div>
             <dt class="text-slate-500">{{ $t('detail.priority') }}</dt>
-            <dd class="font-medium text-slate-900 tabular-nums">{{ priorityScore(lead) }}</dd>
+            <dd class="font-medium text-slate-900 tabular-nums">{{ priorityScore(lead, now) }}</dd>
           </div>
         </dl>
 

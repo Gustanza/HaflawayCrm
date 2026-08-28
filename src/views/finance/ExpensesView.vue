@@ -156,7 +156,7 @@ async function save() {
       </template>
     </PageHeader>
 
-    <div class="px-4 sm:px-6 py-4 sm:py-6 max-w-3xl">
+    <div class="px-4 sm:px-6 py-4 sm:py-6">
 
     <!-- P4, stated where it matters rather than buried in a doc. -->
     <div class="mb-4 rounded-lg bg-slate-100 ring-1 ring-slate-300 p-3">
@@ -269,32 +269,38 @@ async function save() {
           <span class="tabular-nums text-slate-600">{{ formatMoney(group.totalMinor) }}</span>
         </h2>
 
-        <ul class="space-y-1.5">
-          <li v-for="expense in group.expenses" :key="expense.id" class="card p-3">
-            <div class="flex items-start justify-between gap-3">
-              <div class="min-w-0">
-                <p class="text-sm font-medium text-slate-900">
+        <div class="data-table-wrap">
+          <table class="data-table min-w-[40rem]">
+            <thead>
+              <tr>
+                <th>{{ $t('expenses.category') }}</th>
+                <th>{{ $t('expenses.description') }}</th>
+                <th>{{ $t('expenses.allocation') }}</th>
+                <th class="text-right">{{ $t('expenses.amount') }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="expense in group.expenses" :key="expense.id">
+                <td class="font-medium text-slate-900">
                   {{ $t(`expenseCategory.${expense.category}`) }}
-                </p>
-                <p v-if="expense.description" class="text-xs text-slate-500 truncate">
-                  {{ expense.description }}
-                </p>
-                <p class="text-xs text-slate-400">
+                </td>
+                <td class="text-slate-500">{{ expense.description || '—' }}</td>
+                <td class="text-slate-500">
                   {{ $t(`allocation.${expense.allocation?.type ?? 'overhead'}`) }}
                   <template v-if="expense.allocation?.staffId">
                     · {{ expense.allocation.staffId }}
                   </template>
-                </p>
-              </div>
-              <p
-                class="shrink-0 text-sm font-medium tabular-nums"
-                :class="expense.amountMinor < 0 ? 'text-emerald-700' : 'text-slate-900'"
-              >
-                {{ formatMoney(expense.amountMinor, expense.currency) }}
-              </p>
-            </div>
-          </li>
-        </ul>
+                </td>
+                <td
+                  class="num font-medium"
+                  :class="expense.amountMinor < 0 ? 'text-emerald-700' : ''"
+                >
+                  {{ formatMoney(expense.amountMinor, expense.currency) }}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </section>
       </div>
 

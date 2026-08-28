@@ -466,22 +466,22 @@ const totals = computed(() => {
       </p>
       <p v-else class="mb-3" />
 
-      <div class="overflow-x-auto -mx-4 sm:-mx-6 px-4 sm:px-6">
-        <table class="w-full min-w-[46rem] text-sm">
+      <div class="data-table-wrap">
+        <table class="data-table min-w-[46rem]">
           <thead>
-            <tr class="text-left text-xs text-slate-500 border-b border-slate-200">
-              <th class="py-2 pr-3 font-medium">{{ $t('campaigns.campaign') }}</th>
-              <th class="py-2 px-3 font-medium text-right">{{ $t('campaigns.spend') }}</th>
-              <th class="py-2 px-3 font-medium text-right">{{ $t('campaigns.leads') }}</th>
-              <th class="py-2 px-3 font-medium text-right">{{ $t('campaigns.cpl') }}</th>
-              <th class="py-2 px-3 font-medium text-right">{{ $t('campaigns.won') }}</th>
-              <th class="py-2 px-3 font-medium text-right">{{ $t('campaigns.cac') }}</th>
-              <th class="py-2 pl-3 font-medium text-right">{{ $t('campaigns.roas') }}</th>
+            <tr>
+              <th>{{ $t('campaigns.campaign') }}</th>
+              <th class="text-right">{{ $t('campaigns.spend') }}</th>
+              <th class="text-right">{{ $t('campaigns.leads') }}</th>
+              <th class="text-right">{{ $t('campaigns.cpl') }}</th>
+              <th class="text-right">{{ $t('campaigns.won') }}</th>
+              <th class="text-right">{{ $t('campaigns.cac') }}</th>
+              <th class="text-right">{{ $t('campaigns.roas') }}</th>
             </tr>
           </thead>
-          <tbody class="divide-y divide-slate-100">
+          <tbody>
             <tr v-for="row in pager.items.value" :key="row.key">
-              <td class="py-3 pr-3">
+              <td>
                 <p class="font-medium text-slate-900">{{ row.name }}</p>
                 <p class="text-xs text-slate-500">
                   {{ $t(`source.${row.channel}`) }}
@@ -490,15 +490,11 @@ const totals = computed(() => {
                   </span>
                 </p>
               </td>
-              <td class="py-3 px-3 text-right tabular-nums text-slate-700">
-                {{ formatMoney(row.spendMinor, 'TZS', { compact: true }) }}
-              </td>
-              <td class="py-3 px-3 text-right tabular-nums text-slate-700">{{ row.leads }}</td>
-              <td class="py-3 px-3 text-right tabular-nums text-slate-700">
-                {{ formatMoney(row.cplMinor, 'TZS', { compact: true }) }}
-              </td>
-              <td class="py-3 px-3 text-right tabular-nums text-slate-700">{{ row.won }}</td>
-              <td class="py-3 px-3 text-right">
+              <td class="num">{{ formatMoney(row.spendMinor, 'TZS', { compact: true }) }}</td>
+              <td class="num">{{ row.leads }}</td>
+              <td class="num">{{ formatMoney(row.cplMinor, 'TZS', { compact: true }) }}</td>
+              <td class="num">{{ row.won }}</td>
+              <td class="text-right">
                 <MetricValue
                   :value="row.value"
                   :n="row.n"
@@ -506,9 +502,7 @@ const totals = computed(() => {
                   money
                 />
               </td>
-              <td class="py-3 pl-3 text-right tabular-nums text-slate-700">
-                {{ row.roas === null ? '—' : `${row.roas.toFixed(2)}×` }}
-              </td>
+              <td class="num">{{ row.roas === null ? '—' : `${row.roas.toFixed(2)}×` }}</td>
             </tr>
           </tbody>
         </table>

@@ -115,6 +115,55 @@
   .badge {
     @apply inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium ring-1 ring-inset;
   }
+
+  /* The one table pattern, defined once. CampaignsView.vue and DashboardView.vue's
+     per-staff table originated this exact vocabulary; every other screen's table now
+     reuses it verbatim rather than re-deriving the same utility string per view.
+     `min-w-[Xrem]` stays per-table (sized to that table's own column count) — it cannot
+     live here without fixing every table to one width. */
+  .data-table-wrap {
+    @apply overflow-x-auto -mx-4 sm:-mx-6 px-4 sm:px-6;
+  }
+  .data-table {
+    @apply w-full text-sm;
+  }
+  .data-table thead tr {
+    @apply text-left text-xs text-slate-500 border-b border-slate-200;
+  }
+  .data-table th {
+    @apply py-2 px-3 font-medium;
+  }
+  .data-table th:first-child {
+    @apply pr-3 pl-0;
+  }
+  .data-table th:last-child {
+    @apply pl-3 pr-0;
+  }
+  .data-table tbody {
+    @apply divide-y divide-slate-100;
+  }
+  .data-table td {
+    @apply py-3 px-3;
+  }
+  .data-table td:first-child {
+    @apply pr-3 pl-0;
+  }
+  .data-table td:last-child {
+    @apply pl-3 pr-0;
+  }
+  .data-table .num {
+    @apply text-right tabular-nums text-slate-700;
+  }
+
+  /* A compact icon-only action inside a table cell (Call/WhatsApp/Log/Move) — the
+     full-width text button a card could afford does not fit a table row. Still clears
+     the 44px touch floor (P7); it is just square instead of wide. */
+  .icon-btn {
+    @apply inline-flex items-center justify-center rounded-lg text-slate-600
+           hover:bg-slate-100 hover:text-slate-900 disabled:opacity-50 disabled:pointer-events-none;
+    width: var(--spacing-touch);
+    height: var(--spacing-touch);
+  }
 }
 
 /* Honour a user's reduced-motion preference. */

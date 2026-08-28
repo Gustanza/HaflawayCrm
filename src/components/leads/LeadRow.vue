@@ -14,6 +14,7 @@ import { useI18n } from 'vue-i18n'
 import { formatPhone, toTelLink, toWhatsAppLink } from '@/domain/phone.js'
 import { formatMoney } from '@/domain/money.js'
 import { daysToEvent, toDate } from '@/domain/periods.js'
+import { useNow } from '@/composables/useNow.js'
 import StageBadge from './StageBadge.vue'
 import EventCountdown from './EventCountdown.vue'
 
@@ -35,14 +36,19 @@ const whatsappLink = computed(() =>
   ),
 )
 
+// Ticks on its own — see useNow.js. Without it, a card that renders as "not overdue" stays
+// that way — no red ring, no warning — even once its reminder time has actually passed,
+// until some unrelated re-render happens to sweep through this component again.
+const now = useNow()
+
 /** Overdue is the loudest thing in the UI (§10.2). */
 const isOverdue = computed(() => {
   const next = toDate(props.lead.nextActionAt)
-  return next !== null && next.getTime() < Date.now()
+  return next !== null && next.getTime() < now.value.getTime()
 })
 
 const daysOverdue = computed(() => {
-  const d = daysToEvent(props.lead.nextActionAt)
+  const d = daysToEvent(props.lead.nextActionAt, now.value)
   return d === null ? null : Math.abs(d)
 })
 </script>

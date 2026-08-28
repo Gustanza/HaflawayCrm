@@ -59,7 +59,35 @@ const SNOOZES = [
 ]
 
 const outcome = ref(null)
-const snooze = ref(null)
+// Tracked by INDEX, not by the SNOOZES object itself: assigning an object to a ref's
+// `.value` makes Vue wrap it in a reactive Proxy (toReactive()), so `snooze.value` would
+// never again be === the plain object it was assigned from — every button's `data-on`
+// check silently evaluated false, and nothing ever appeared selected, even though the
+// underlying choice (read via property access, which a Proxy forwards fine) still worked.
+// An index is a primitive; refs never wrap primitives, so identity comparison is safe.
+// `snoozeIndex` is null (nothing chosen), a number (one of SNOOZES), or the literal string
+// 'custom' — a real customer does not always fit one of five fixed slots, so this is the
+// escape hatch: pick any date and time instead of the nearest preset.
+const snoozeIndex = ref(null)
+const customDateTime = ref('')
+
+/** `datetime-local` wants "YYYY-MM-DDTHH:mm" in the viewer's OWN local time, not UTC. */
+function toLocalInputValue(date) {
+  const pad = (n) => String(n).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
+}
+
+/** Floor for the picker — a follow-up cannot be reminded for a time already past. */
+const minDateTime = toLocalInputValue(new Date())
+
+const snooze = computed(() => {
+  if (snoozeIndex.value === 'custom') {
+    // `new Date("YYYY-MM-DDTHH:mm")` with no offset/Z is parsed in LOCAL time by spec —
+    // exactly what a `datetime-local` input's value represents.
+    return customDateTime.value ? { custom: true, at: new Date(customDateTime.value) } : null
+  }
+  return snoozeIndex.value !== null ? SNOOZES[snoozeIndex.value] : null
+})
 const note = ref('')
 const channel = ref('call')
 const saving = ref(false)
@@ -70,12 +98,16 @@ const TONE = {
   bad: 'ring-rose-300 data-[on=true]:bg-rose-600 data-[on=true]:text-white',
 }
 
-/** Speaking to someone is the only outcome that does not need a follow-up time. */
-const needsSnooze = computed(() => outcome.value !== null && outcome.value !== 'spoke')
+// Previously hidden for 'spoke' on the assumption a successful call never needs a
+// follow-up — wrong in practice (e.g. "confirmed details, remind me to send the quote").
+// A reminder is optional for every outcome, "spoke" included; just reveal it once there is
+// an outcome to attach it to.
+const canSnooze = computed(() => outcome.value !== null)
 const canSave = computed(() => outcome.value !== null)
 
 function nextActionDate(choice) {
   if (!choice) return null
+  if (choice.custom) return choice.at
   const now = new Date()
   if (choice.hours) return new Date(now.getTime() + choice.hours * 3600 * 1000)
   if (choice.days) return new Date(now.getTime() + choice.days * 24 * 3600 * 1000)
@@ -221,9 +253,13 @@ function onKeydown(event) {
           </div>
         </fieldset>
 
-        <!-- Tap 2: when to try again -->
-        <fieldset v-if="needsSnooze">
-          <legend class="field-label">{{ $t('activity.remindMe') }}</legend>
+        <!-- Tap 2: when to try again. Optional for every outcome, "We spoke" included —
+             a successful call can still need a follow-up. -->
+        <fieldset v-if="canSnooze">
+          <legend class="field-label">
+            {{ $t('activity.remindMe') }}
+            <span class="font-normal text-slate-400">· {{ $t('common.optional') }}</span>
+          </legend>
           <div class="flex flex-wrap gap-2">
             <button
               v-for="(option, i) in SNOOZES"
@@ -233,12 +269,36 @@ function onKeydown(event) {
                      bg-white text-slate-700 data-[on=true]:bg-brand-600
                      data-[on=true]:text-white data-[on=true]:ring-brand-600"
               style="min-height: var(--spacing-touch)"
-              :data-on="snooze === option"
-              :aria-pressed="snooze === option"
-              @click="snooze = option"
+              :data-on="snoozeIndex === i"
+              :aria-pressed="snoozeIndex === i"
+              @click="snoozeIndex = i"
             >
               {{ $t(option.key) }}
             </button>
+            <!-- Not every follow-up fits one of the five fixed slots above. -->
+            <button
+              type="button"
+              class="rounded-full px-4 text-sm font-medium ring-1 ring-inset ring-slate-400
+                     bg-white text-slate-700 data-[on=true]:bg-brand-600
+                     data-[on=true]:text-white data-[on=true]:ring-brand-600"
+              style="min-height: var(--spacing-touch)"
+              :data-on="snoozeIndex === 'custom'"
+              :aria-pressed="snoozeIndex === 'custom'"
+              @click="snoozeIndex = 'custom'"
+            >
+              {{ $t('snooze.custom') }}
+            </button>
+          </div>
+
+          <div v-if="snoozeIndex === 'custom'" class="mt-3">
+            <label for="custom-remind-at" class="field-label">{{ $t('snooze.customLabel') }}</label>
+            <input
+              id="custom-remind-at"
+              v-model="customDateTime"
+              type="datetime-local"
+              class="field-input"
+              :min="minDateTime"
+            />
           </div>
         </fieldset>
 

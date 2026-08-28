@@ -179,7 +179,9 @@
     "overdueNow": "Due now",
     "allClear": "Nothing left to do",
     "allClearBody": "You have followed up with everyone for now. Add a new lead, or take a break.",
-    "scheduledLater": "{count} scheduled further out"
+    "scheduledLater": "{count} scheduled further out",
+    "mayBeMore": "there may be more not shown",
+    "due": "Due"
   },
   "activity": {
     "title": "Log what happened",
@@ -204,7 +206,9 @@
     "tomorrow": "Tomorrow 9am",
     "threeDays": "3 days",
     "afterCommittee": "After committee",
-    "oneWeek": "1 week"
+    "oneWeek": "1 week",
+    "custom": "Pick a time",
+    "customLabel": "Remind me at"
   },
   "source": {
     "whatsapp": "WhatsApp",
@@ -244,7 +248,16 @@
     "noMatchesBody": "Try a different name, or clear the filters.",
     "clearFilters": "Clear filters",
     "none": "No leads yet",
-    "noneBody": "Add your first lead and it will appear here."
+    "noneBody": "Add your first lead and it will appear here.",
+    "owner": "Owner",
+    "allOwners": "Everyone",
+    "loadMore": "Load more",
+    "name": "Name",
+    "event": "Event",
+    "stage": "Stage",
+    "dealValue": "Deal value",
+    "phone": "Phone",
+    "actions": "Actions"
   },
   "detail": {
     "notFound": "Lead not found.",
@@ -335,6 +348,7 @@
   },
   "users": {
     "subtitle": "{count} users",
+    "status": "Status",
     "inactive": "Deactivated",
     "deactivate": "Deactivate",
     "reactivate": "Reactivate",
@@ -432,6 +446,7 @@
     "periodCaption": "Outcomes counted in the month the deal CLOSED. Answers: how did we do this month? Mixes in spend from earlier months.",
     "incompleteCohort": "This month is incomplete — many deals are still open, so these figures will rise.",
     "noCostAccess": "Your role does not include cost visibility. Ask an admin, manager or finance colleague to view CAC and spend.",
+    "countShare": "Count · Share",
     "policyNote": "Salaries: {salaries} · Commission: {commission} · Overhead: {overhead} · Attribution: {model}"
   },
   "funnel": {

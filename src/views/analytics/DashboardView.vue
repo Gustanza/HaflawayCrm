@@ -26,12 +26,15 @@ import {
   summarise, cohort, closedIn, cacBy, funnel, LOW_CONFIDENCE_N,
 } from '@/domain/metrics.js'
 import { useUserNames } from '@/composables/useUserNames.js'
+import { useI18n } from 'vue-i18n'
 import PageHeader from '@/components/layout/PageHeader.vue'
 import MetricValue from '@/components/ui/MetricValue.vue'
 import LoadingRows from '@/components/ui/LoadingRows.vue'
 import PaginationBar from '@/components/ui/PaginationBar.vue'
+import BarChart from '@/components/ui/BarChart.vue'
 
 const auth = useAuthStore()
+const { t } = useI18n()
 const user = computed(() => ({
   uid: auth.uid, role: auth.role, orgId: auth.orgId, teamId: auth.teamId,
 }))
@@ -221,7 +224,6 @@ const perChannel = computed(() => {
 })
 
 const steps = computed(() => funnel(monthLeads.value))
-const maxStep = computed(() => steps.value[0]?.count || 1)
 
 const trend = computed(() =>
   months.value.map((key) => {
@@ -234,8 +236,24 @@ const trend = computed(() =>
   }),
 )
 
-const maxTrendRevenue = computed(() =>
-  Math.max(1, ...trend.value.map((m) => m.revenueMinor ?? 0)),
+/** Chart-ready shape for BarChart.vue — one bar per month, height by revenue. */
+const trendChartItems = computed(() =>
+  trend.value.map((month) => ({
+    key: month.monthKey,
+    label: month.monthKey,
+    value: month.revenueMinor ?? 0,
+    direct: `${month.won}w`,
+  })),
+)
+
+/** Chart-ready shape for BarChart.vue — one bar per stage, width by count. */
+const funnelChartItems = computed(() =>
+  steps.value.map((step) => ({
+    key: step.stage,
+    label: t(`funnel.${step.stage}`),
+    value: step.count,
+    direct: step.dropoff === null ? '' : `-${formatPercent(step.dropoff, 0)}`,
+  })),
 )
 </script>
 
@@ -378,49 +396,28 @@ const maxTrendRevenue = computed(() =>
         </div>
       </div>
 
-      <!-- Trend -->
+      <!-- Trend: one bar per month, height by revenue; won count direct-labeled above each bar. -->
       <section class="card p-4 mb-4">
         <h2 class="text-sm font-semibold text-slate-800 mb-3">{{ $t('analytics.trend') }}</h2>
-        <div class="space-y-2">
-          <div v-for="month in trend" :key="month.monthKey" class="flex items-center gap-3">
-            <span class="w-16 shrink-0 text-xs text-slate-500 tabular-nums">{{ month.monthKey }}</span>
-            <div class="flex-1 h-6 bg-slate-100 rounded overflow-hidden" role="img"
-                 :aria-label="`${month.monthKey}: ${month.won} won`">
-              <div
-                class="h-full bg-brand-500 rounded"
-                :style="{ width: `${Math.round(((month.revenueMinor ?? 0) / maxTrendRevenue) * 100)}%` }"
-              />
-            </div>
-            <span class="w-20 shrink-0 text-right text-xs text-slate-600 tabular-nums">
-              {{ formatMoney(month.revenueMinor, 'TZS', { compact: true }) }}
-            </span>
-            <span class="w-10 shrink-0 text-right text-xs text-slate-400 tabular-nums">
-              {{ month.won }}w
-            </span>
-          </div>
-        </div>
+        <BarChart
+          orientation="vertical"
+          :items="trendChartItems"
+          :value-formatter="(v) => formatMoney(v, 'TZS', { compact: true })"
+          hue="var(--color-brand-500)"
+          :aria-label="$t('analytics.trend')"
+        />
       </section>
 
-      <!-- Funnel -->
+      <!-- Funnel: one bar per stage, width by count; drop-off direct-labeled beside each bar. -->
       <section class="card p-4 mb-4">
         <h2 class="text-sm font-semibold text-slate-800 mb-3">{{ $t('analytics.funnel') }}</h2>
-        <div class="space-y-2">
-          <div v-for="step in steps" :key="step.stage" class="flex items-center gap-3">
-            <span class="w-20 shrink-0 text-xs text-slate-500">{{ $t(`funnel.${step.stage}`) }}</span>
-            <div class="flex-1 h-6 bg-slate-100 rounded overflow-hidden">
-              <div
-                class="h-full bg-slate-600 rounded"
-                :style="{ width: `${Math.round((step.count / maxStep) * 100)}%` }"
-              />
-            </div>
-            <span class="w-10 shrink-0 text-right text-xs text-slate-700 tabular-nums">
-              {{ step.count }}
-            </span>
-            <span class="w-14 shrink-0 text-right text-xs text-rose-600 tabular-nums">
-              {{ step.dropoff === null ? '' : `-${formatPercent(step.dropoff, 0)}` }}
-            </span>
-          </div>
-        </div>
+        <BarChart
+          orientation="horizontal"
+          :items="funnelChartItems"
+          :value-formatter="(v) => String(v)"
+          hue="var(--color-slate-600)"
+          :aria-label="$t('analytics.funnel')"
+        />
       </section>
 
       <!-- CAC per staff. The politically loaded table — guard rails on full display. -->
@@ -432,26 +429,26 @@ const maxTrendRevenue = computed(() =>
           {{ $t('analytics.noData') }}
         </div>
 
-        <div v-else class="overflow-x-auto -mx-4 sm:-mx-6 px-4 sm:px-6">
-          <table class="w-full min-w-[32rem] text-sm">
+        <div v-else class="data-table-wrap">
+          <table class="data-table min-w-[32rem]">
             <thead>
-              <tr class="text-left text-xs text-slate-500 border-b border-slate-200">
-                <th class="py-2 pr-3 font-medium">{{ $t('analytics.staff') }}</th>
-                <th class="py-2 px-3 font-medium text-right">{{ $t('analytics.leadsCreated') }}</th>
-                <th class="py-2 px-3 font-medium text-right">{{ $t('analytics.won') }}</th>
-                <th class="py-2 px-3 font-medium text-right">{{ $t('analytics.winRate') }}</th>
-                <th class="py-2 pl-3 font-medium text-right">{{ $t('analytics.cac') }}</th>
+              <tr>
+                <th>{{ $t('analytics.staff') }}</th>
+                <th class="text-right">{{ $t('analytics.leadsCreated') }}</th>
+                <th class="text-right">{{ $t('analytics.won') }}</th>
+                <th class="text-right">{{ $t('analytics.winRate') }}</th>
+                <th class="text-right">{{ $t('analytics.cac') }}</th>
               </tr>
             </thead>
-            <tbody class="divide-y divide-slate-100">
+            <tbody>
               <tr v-for="row in staffPager.items.value" :key="row.key">
-                <td class="py-2.5 pr-3 text-slate-900">{{ nameFor(row.key) }}</td>
-                <td class="py-2.5 px-3 text-right tabular-nums text-slate-700">{{ row.leads }}</td>
-                <td class="py-2.5 px-3 text-right tabular-nums text-slate-700">{{ row.won }}</td>
-                <td class="py-2.5 px-3 text-right">
+                <td class="text-slate-900">{{ nameFor(row.key) }}</td>
+                <td class="num">{{ row.leads }}</td>
+                <td class="num">{{ row.won }}</td>
+                <td class="text-right">
                   <MetricValue :value="row.winRate.value" :n="row.winRate.n" percent :show-n="false" />
                 </td>
-                <td class="py-2.5 pl-3 text-right">
+                <td class="text-right">
                   <MetricValue
                     :value="row.value"
                     :n="row.n"
@@ -494,14 +491,22 @@ const maxTrendRevenue = computed(() =>
           <div v-if="!perChannel.length" class="text-sm text-slate-400">
             {{ $t('analytics.noData') }}
           </div>
-          <ul v-else class="space-y-2">
-            <li v-for="row in perChannel" :key="row.key" class="flex items-center justify-between gap-2">
-              <span class="text-sm text-slate-700">{{ $t(`source.${row.key}`) }}</span>
-              <span class="text-sm text-slate-600 tabular-nums">
-                {{ row.leads }} → {{ row.won }}
-              </span>
-            </li>
-          </ul>
+          <div v-else class="data-table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>{{ $t('analytics.perChannel') }}</th>
+                  <th class="text-right">{{ $t('analytics.leadsCreated') }} → {{ $t('analytics.won') }}</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="row in perChannel" :key="row.key">
+                  <td class="text-slate-700">{{ $t(`source.${row.key}`) }}</td>
+                  <td class="num">{{ row.leads }} → {{ row.won }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </section>
 
         <section class="card p-4">
@@ -509,18 +514,22 @@ const maxTrendRevenue = computed(() =>
           <div v-if="!summary.lossReasons.length" class="text-sm text-slate-400">
             {{ $t('analytics.noData') }}
           </div>
-          <ul v-else class="space-y-2">
-            <li
-              v-for="row in summary.lossReasons"
-              :key="row.reason"
-              class="flex items-center justify-between gap-2"
-            >
-              <span class="text-sm text-slate-700">{{ $t(`lossReason.${row.reason}`) }}</span>
-              <span class="text-sm text-slate-600 tabular-nums">
-                {{ row.count }} · {{ formatPercent(row.share, 0) }}
-              </span>
-            </li>
-          </ul>
+          <div v-else class="data-table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>{{ $t('analytics.lossReasons') }}</th>
+                  <th class="text-right">{{ $t('analytics.countShare') }}</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="row in summary.lossReasons" :key="row.reason">
+                  <td class="text-slate-700">{{ $t(`lossReason.${row.reason}`) }}</td>
+                  <td class="num">{{ row.count }} · {{ formatPercent(row.share, 0) }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </section>
       </div>
     </template>

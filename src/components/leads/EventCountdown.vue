@@ -8,6 +8,7 @@
 import { computed } from 'vue'
 import { daysToEvent } from '@/domain/periods.js'
 import { urgencyBand } from '@/domain/scoring.js'
+import { useNow } from '@/composables/useNow.js'
 
 const props = defineProps({
   eventDate: { type: [Object, Date, String, Number], default: null },
@@ -15,7 +16,10 @@ const props = defineProps({
   compact: { type: Boolean, default: false },
 })
 
-const days = computed(() => daysToEvent(props.eventDate))
+// Ticks on its own — see useNow.js. Without it "Event is today" stays true past midnight
+// until something else forces this component to re-render.
+const now = useNow()
+const days = computed(() => daysToEvent(props.eventDate, now.value))
 const band = computed(() => urgencyBand(days.value))
 
 const BAND_CLASS = {

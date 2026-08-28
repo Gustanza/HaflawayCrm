@@ -179,7 +179,9 @@
     "overdueNow": "Inatakiwa sasa",
     "allClear": "Hakuna kazi iliyobaki",
     "allClearBody": "Umemaliza kufuatilia wote kwa sasa. Ongeza mteja mpya au pumzika.",
-    "scheduledLater": "wengine {count} wamepangwa mbele"
+    "scheduledLater": "wengine {count} wamepangwa mbele",
+    "mayBeMore": "huenda wapo wengine wasioonyeshwa",
+    "due": "Muda"
   },
   "activity": {
     "title": "Andika kilichotokea",
@@ -204,7 +206,9 @@
     "tomorrow": "Kesho asubuhi",
     "threeDays": "Siku 3",
     "afterCommittee": "Baada ya kikao",
-    "oneWeek": "Wiki 1"
+    "oneWeek": "Wiki 1",
+    "custom": "Chagua muda",
+    "customLabel": "Nikumbushe saa"
   },
   "source": {
     "whatsapp": "WhatsApp",
@@ -244,7 +248,16 @@
     "noMatchesBody": "Jaribu jina lingine au ondoa vichujio.",
     "clearFilters": "Ondoa vichujio",
     "none": "Bado huna wateja",
-    "noneBody": "Ongeza mteja wako wa kwanza ili aanze kuonekana hapa."
+    "noneBody": "Ongeza mteja wako wa kwanza ili aanze kuonekana hapa.",
+    "owner": "Mhusika",
+    "allOwners": "Wote",
+    "loadMore": "Onyesha zaidi",
+    "name": "Jina",
+    "event": "Tukio",
+    "stage": "Hatua",
+    "dealValue": "Thamani",
+    "phone": "Simu",
+    "actions": "Vitendo"
   },
   "detail": {
     "notFound": "Mteja hakupatikana.",
@@ -335,6 +348,7 @@
   },
   "users": {
     "subtitle": "Watumiaji {count}",
+    "status": "Hali",
     "inactive": "Amesimamishwa",
     "deactivate": "Simamisha",
     "reactivate": "Rudisha",
@@ -432,6 +446,7 @@
     "periodCaption": "Matokeo yanahesabiwa kwa mwezi biashara ILIPOFUNGWA. Jibu: tulifanyaje mwezi huu?",
     "incompleteCohort": "Mwezi huu bado haujakamilika — biashara nyingi bado ziko wazi, hivyo namba zitapanda.",
     "noCostAccess": "Nafasi yako haihusishi kuona gharama. Muombe msimamizi, meneja au mfanyakazi wa fedha aone CAC na matumizi.",
+    "countShare": "Idadi · Asilimia",
     "policyNote": "Mishahara: {salaries} · Komisheni: {commission} · Gharama za jumla: {overhead} · Uhusishaji: {model}"
   },
   "funnel": {

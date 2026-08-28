@@ -102,11 +102,12 @@ export async function leadsQuery(user, { scope = 'auto', stage, leadStatus, orde
 }
 
 /** Open leads sorted by event date — the urgency board (§12 screen 7, P2). */
-export async function urgencyBoardQuery(user, { max = 50 } = {}) {
+export async function urgencyBoardQuery(user, { max = 50, after } = {}) {
   return leadsQuery(user, {
     leadStatus: 'open',
     order: { field: 'eventDate', direction: 'asc' },
     max,
+    after,
   })
 }
 
