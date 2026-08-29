@@ -282,15 +282,94 @@ describe('lead updates', () => {
     await assertFails(updateDoc(doc(db, 'leads/l1'), { createdBy: 'agent1-the-hero', ...stamp }))
   })
 
-  it('denies hard deletion — soft delete only', async () => {
-    const db = await asAdmin()
-    await assertFails(deleteDoc(doc(db, 'leads/l1')))
+  // Hard deletion used to be denied to EVERYONE here, including admins. An admin-only
+  // hard delete now exists deliberately (see delete.rules.test.js and deleteLead() in
+  // leads.service.js), so what this file still guards is the floor beneath it: soft delete
+  // remains the only route for every role that is not an admin.
+  it('denies hard deletion to a manager — soft delete only', async () => {
+    await assertFails(deleteDoc(doc(await asManager(), 'leads/l1')))
+  })
+
+  it('denies hard deletion to the owning agent', async () => {
+    await assertFails(deleteDoc(doc(await asAgent('agent1'), 'leads/l1')))
   })
 })
 
 // ---------------------------------------------------------------------------
 // Activities — append-only. The audit trail that settles commission disputes.
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// Free movement, and the one gate left on it.
+//
+// The stage graph is complete now: any stage reaches any stage, because forbidding a route
+// was stopping typo corrections rather than bad deals. The server has to agree, or the UI
+// offers a move that bounces off a permission error. What it must STILL refuse is an agent
+// pulling a lead back out of a closed stage - that un-counts a win or a loss.
+// ---------------------------------------------------------------------------
+describe('stage moves are free between open stages', () => {
+  const stamp = { updatedAt: serverTimestamp(), updatedBy: 'agent1' }
+
+  it('lets an agent move a lead BACKWARDS - the correction that was impossible', async () => {
+    await seed('leads/l1', leadDoc({ ownerId: 'agent1', stage: 'contacted' }))
+    const db = await asAgent('agent1')
+    await assertSucceeds(updateDoc(doc(db, 'leads/l1'), { stage: 'new', ...stamp }))
+  })
+
+  it('lets an agent skip ahead, since the field requirements are the real gate', async () => {
+    await seed('leads/l1', leadDoc({ ownerId: 'agent1', stage: 'new' }))
+    const db = await asAgent('agent1')
+    await assertSucceeds(updateDoc(doc(db, 'leads/l1'), { stage: 'quoted', ...stamp }))
+  })
+})
+
+describe('reopening a closed lead needs a manager', () => {
+  const reopen = (uid) => ({
+    stage: 'contacted',
+    closedAt: null,
+    closedBy: null,
+    updatedAt: serverTimestamp(),
+    updatedBy: uid,
+  })
+
+  beforeEach(async () => {
+    await seed(
+      'leads/l1',
+      leadDoc({ ownerId: 'agent1', stage: 'lost', leadStatus: 'closed_lost', lossReason: 'price' }),
+    )
+  })
+
+  it('refuses the owning agent', async () => {
+    await assertFails(updateDoc(doc(await asAgent('agent1'), 'leads/l1'), reopen('agent1')))
+  })
+
+  it('allows a manager on their own team', async () => {
+    const db = await asManager('manager1', { teamId: 'team-a' })
+    await assertSucceeds(updateDoc(doc(db, 'leads/l1'), reopen('manager1')))
+  })
+
+  it('allows an admin', async () => {
+    await assertSucceeds(updateDoc(doc(await asAdmin(), 'leads/l1'), reopen('admin1')))
+  })
+
+  it('still refuses an agent even when the lead was WON', async () => {
+    await seed(
+      'leads/l2',
+      leadDoc({ ownerId: 'agent1', stage: 'won', leadStatus: 'closed_won', dealValueMinor: 500000 }),
+    )
+    await assertFails(updateDoc(doc(await asAgent('agent1'), 'leads/l2'), reopen('agent1')))
+  })
+
+  it('lets an agent keep editing a closed lead WITHOUT moving it', async () => {
+    // The gate is on leaving the stage, not on touching the document. Restating the same
+    // stage while editing another field must still pass.
+    const db = await asAgent('agent1')
+    await assertSucceeds(
+      updateDoc(doc(db, 'leads/l1'), { displayName: 'Corrected spelling', stage: 'lost',
+        updatedAt: serverTimestamp(), updatedBy: 'agent1' }),
+    )
+  })
+})
+
 describe('activities are append-only (P1, P4)', () => {
   beforeEach(async () => {
     await seed('leads/l1', leadDoc({ ownerId: 'agent1' }))
@@ -363,9 +442,15 @@ describe('activities are append-only (P1, P4)', () => {
     await assertFails(updateDoc(doc(db, 'leads/l1/activities/a2'), { isVoided: false }))
   })
 
-  it('denies deletion to everyone, including admins', async () => {
+  // Append-only still holds for every role that writes to a timeline. The single exception
+  // is an admin destroying the whole lead — a timeline cannot outlive the lead it documents
+  // — and that is covered, positively and negatively, in delete.rules.test.js.
+  it('denies deletion to the agent who wrote the entry', async () => {
     await assertFails(deleteDoc(doc(await asAgent('agent1'), 'leads/l1/activities/a1')))
-    await assertFails(deleteDoc(doc(await asAdmin(), 'leads/l1/activities/a1')))
+  })
+
+  it('denies deletion to a manager', async () => {
+    await assertFails(deleteDoc(doc(await asManager(), 'leads/l1/activities/a1')))
   })
 
   it("denies another agent reading the lead's timeline", async () => {

@@ -18,6 +18,7 @@ import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth.js'
 import { useUiStore } from '@/stores/ui.js'
 import { logActivity, setNextAction } from '@/services/leads.service.js'
+import { outcomeMessageKey } from '@/domain/taxonomies.js'
 
 const props = defineProps({ lead: { type: Object, required: true } })
 const emit = defineEmits(['close', 'logged'])
@@ -30,13 +31,13 @@ const panel = useTemplateRef('panel')
 
 /** Call outcomes, stolen wholesale from Close.com (§3) because they are the right set. */
 const OUTCOMES = [
-  { value: 'spoke', key: 'activity.outcome.spoke', tone: 'good' },
-  { value: 'no_answer', key: 'activity.outcome.noAnswer', tone: 'warn' },
-  { value: 'switched_off', key: 'activity.outcome.switchedOff', tone: 'warn' },
-  { value: 'busy', key: 'activity.outcome.busy', tone: 'warn' },
-  { value: 'callback_requested', key: 'activity.outcome.callbackRequested', tone: 'good' },
-  { value: 'wrong_number', key: 'activity.outcome.wrongNumber', tone: 'bad' },
-]
+  { value: 'spoke', tone: 'good' },
+  { value: 'no_answer', tone: 'warn' },
+  { value: 'switched_off', tone: 'warn' },
+  { value: 'busy', tone: 'warn' },
+  { value: 'callback_requested', tone: 'good' },
+  { value: 'wrong_number', tone: 'bad' },
+].map((o) => ({ ...o, key: outcomeMessageKey(o.value) }))
 
 /**
  * How this interaction happened. Defaults to 'call' and stays a single optional tap, not a

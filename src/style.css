@@ -120,37 +120,67 @@
      per-staff table originated this exact vocabulary; every other screen's table now
      reuses it verbatim rather than re-deriving the same utility string per view.
      `min-w-[Xrem]` stays per-table (sized to that table's own column count) — it cannot
-     live here without fixing every table to one width. */
+     live here without fixing every table to one width.
+
+     THE TABLE IS A CARD. It used to bleed to the screen edge on negative margins, which
+     made every list read as raw output dropped onto the page background rather than as a
+     considered object. Giving it a surface, a hairline ring and a soft shadow costs nothing
+     and is what separates "a table" from "the leads". §13 still rules the palette: the
+     deployment device is a cheap Android screen held outdoors, so this is contrast and
+     structure, never decoration — no low-contrast greys, no tinted text carrying meaning on
+     its own, no gradients competing with the urgency colours the rows use for real signal. */
   .data-table-wrap {
-    @apply overflow-x-auto -mx-4 sm:-mx-6 px-4 sm:px-6;
+    @apply overflow-x-auto rounded-xl bg-white ring-1 ring-slate-200 shadow-sm;
   }
   .data-table {
     @apply w-full text-sm;
   }
+
+  /* A quiet band, not a heavy rule: the header is scaffolding for the rows, and the eye
+     should land on a lead's name first. Small caps with wide tracking reads as a label at a
+     glance even before it is read as words. */
   .data-table thead tr {
-    @apply text-left text-xs text-slate-500 border-b border-slate-200;
+    @apply border-b border-slate-200 bg-slate-50 text-left;
   }
   .data-table th {
-    @apply py-2 px-3 font-medium;
+    @apply whitespace-nowrap px-3 py-2.5 text-[0.6875rem] font-semibold uppercase
+           tracking-[0.06em] text-slate-500;
   }
-  .data-table th:first-child {
-    @apply pr-3 pl-0;
+
+  /* Hairlines between rows, full padding at the card's edges. */
+  .data-table tbody tr {
+    @apply border-t border-slate-100;
   }
-  .data-table th:last-child {
-    @apply pl-3 pr-0;
-  }
-  .data-table tbody {
-    @apply divide-y divide-slate-100;
+  .data-table tbody tr:first-child {
+    @apply border-t-0;
   }
   .data-table td {
-    @apply py-3 px-3;
+    @apply px-3 py-3.5 align-middle;
   }
+  .data-table th:first-child,
   .data-table td:first-child {
-    @apply pr-3 pl-0;
+    @apply pl-4 sm:pl-5;
   }
+  .data-table th:last-child,
   .data-table td:last-child {
-    @apply pl-3 pr-0;
+    @apply pr-4 sm:pr-5;
   }
+
+  /* Hover lands on the CELLS, as a translucent wash, deliberately.
+     Rows carry their own meaning-bearing background — `bg-rose-50/40` marks an overdue
+     lead — and those are Tailwind utilities, which win over this @layer components rule
+     whatever the specificity. A solid hover colour would therefore either be ignored on
+     exactly the rows that matter most, or (painted on the cell) erase the one tint the row
+     was using to warn somebody. A transparent wash composes over both. */
+  .data-table tbody tr:hover td {
+    background-color: rgb(15 23 42 / 0.035);
+  }
+  .data-table tbody tr {
+    @apply transition-colors;
+  }
+
+  /* Figures line up under each other, so a column of money can be compared by eye
+     rather than read digit by digit. */
   .data-table .num {
     @apply text-right tabular-nums text-slate-700;
   }

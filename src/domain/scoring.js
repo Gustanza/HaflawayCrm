@@ -10,7 +10,7 @@
  * most consequential number in the product: it is what an agent actually acts on all day.
  */
 
-import { daysToEvent } from './periods.js'
+import { daysToEvent, dayKey, toDate } from './periods.js'
 
 /* ---------------------------------------------------------------------------
  * Urgency — the event-date clock (P2)
@@ -54,6 +54,80 @@ export function urgencyBand(days) {
   if (days <= 14) return 'high'
   if (days <= 30) return 'medium'
   return 'low'
+}
+
+/* ---------------------------------------------------------------------------
+ * The follow-up clock — `nextActionAt` (§10.2)
+ *
+ * A SECOND, INDEPENDENT clock, and the distinction matters: `eventDate` is the customer's
+ * wedding, `nextActionAt` is the promise the agent made about when to ring them back. The
+ * urgency band above answers "how soon is their day"; these answer "how soon is my call".
+ * Confusing the two is exactly what made a saved "remind me in 2 hours" invisible on the
+ * lead list, which showed only the event countdown.
+ * ------------------------------------------------------------------------- */
+
+const MINUTE_MS = 60 * 1000
+const HOUR_MS = 60 * MINUTE_MS
+
+/**
+ * Which work bucket a reminder falls in — the same partition the work queue's sections
+ * use, so the list and the queue can never disagree about what "overdue" means.
+ *
+ * 'none' is its own bucket rather than being folded into 'later': a lead nobody has
+ * committed to calling back is a real and actionable category (nothing is scheduled), not
+ * a lead scheduled far out. Callers that want the old lenient grouping must map it.
+ */
+export function followUpBucket(nextActionAt, now = new Date()) {
+  const next = toDate(nextActionAt)
+  if (!next) return 'none'
+
+  const nowMs = toDate(now)?.getTime() ?? Date.now()
+  if (next.getTime() < nowMs) return 'overdue'
+  if (dayKey(next) === dayKey(now)) return 'today'
+
+  const days = daysToEvent(next, now)
+  return days !== null && days <= 7 ? 'upcoming' : 'later'
+}
+
+/**
+ * How to SAY when the reminder is due, as an i18n descriptor rather than a string — the
+ * domain layer stays free of vue-i18n and of the viewer's locale, and the wording stays
+ * unit-testable.
+ *
+ * Returns null when nothing is scheduled, otherwise `{ bucket, key, count?, withTime? }`,
+ * where `key` names a message under `nextAction.*` and `withTime` asks the caller to
+ * supply a formatted `{time}` (only the "Tomorrow 09:00" case needs one — a bare
+ * "in 1 day" throws away the single most useful fact about a 9am reminder).
+ *
+ * Sub-day resolution is REAL elapsed time, not calendar days: "2 hours" is the most-used
+ * snooze in the product, and `daysToEvent` would render it as 0 days and say nothing.
+ * Past a day the count goes back to calendar days, because by then "3 days late" is how
+ * anyone would actually describe it.
+ */
+export function followUpLabel(nextActionAt, now = new Date()) {
+  const next = toDate(nextActionAt)
+  if (!next) return null
+
+  const nowMs = toDate(now)?.getTime() ?? Date.now()
+  const bucket = followUpBucket(next, now)
+  const diff = next.getTime() - nowMs
+
+  if (diff < 0) {
+    const late = -diff
+    // Under an hour late reads as "due now", not "7 min overdue" — the agent is looking at
+    // a lead they are supposed to be ringing right now, and a precise number is noise.
+    if (late < HOUR_MS) return { bucket, key: 'overdueNow' }
+    if (late < 24 * HOUR_MS) return { bucket, key: 'overdueHours', count: Math.floor(late / HOUR_MS) }
+    const days = daysToEvent(next, now)
+    return { bucket, key: 'overdueDays', count: Math.max(1, Math.abs(days ?? 1)) }
+  }
+
+  if (diff < HOUR_MS) return { bucket, key: 'dueMinutes', count: Math.max(1, Math.round(diff / MINUTE_MS)) }
+  if (bucket === 'today') return { bucket, key: 'dueHours', count: Math.max(1, Math.round(diff / HOUR_MS)) }
+
+  const days = daysToEvent(next, now)
+  if (days === 1) return { bucket, key: 'tomorrow', withTime: true }
+  return { bucket, key: 'dueDays', count: days ?? 1 }
 }
 
 /* ---------------------------------------------------------------------------

@@ -43,6 +43,7 @@ import { useI18n } from 'vue-i18n'
 import PageHeader from '@/components/layout/PageHeader.vue'
 import StageBadge from '@/components/leads/StageBadge.vue'
 import EventCountdown from '@/components/leads/EventCountdown.vue'
+import NextActionCountdown from '@/components/leads/NextActionCountdown.vue'
 import LogActivityDialog from '@/components/leads/LogActivityDialog.vue'
 import LoadingRows from '@/components/ui/LoadingRows.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
@@ -187,11 +188,17 @@ function whatsappLink(lead) {
           <span class="text-slate-400 font-normal">{{ group.total }}</span>
         </h2>
         <div class="data-table-wrap">
-          <table class="data-table min-w-[44rem]">
+          <table class="data-table min-w-[50rem]">
             <thead>
               <tr>
                 <th>{{ $t('leads.name') }}</th>
                 <th>{{ $t('leads.event') }}</th>
+                <!-- The board bands by the WEDDING date; this column is the callback the
+                     agent promised. Both, side by side, because the row that should scare
+                     anyone is the one that is red twice — a wedding on Saturday and a
+                     follow-up you are already a day late on. Neither number says that
+                     alone. -->
+                <th>{{ $t('leads.nextAction') }}</th>
                 <th>{{ $t('leads.stage') }}</th>
                 <th v-if="canSeeOtherOwners">{{ $t('leads.owner') }}</th>
                 <th>{{ $t('leads.phone') }}</th>
@@ -203,13 +210,16 @@ function whatsappLink(lead) {
                 <td>
                   <RouterLink
                     :to="{ name: 'lead-detail', params: { id: lead.id } }"
-                    class="font-medium text-slate-900 hover:text-brand-700"
+                    class="font-semibold text-slate-900 hover:text-brand-700"
                   >
                     {{ lead.displayName || $t('lead.unnamed') }}
                   </RouterLink>
                 </td>
                 <td>
                   <EventCountdown :event-date="lead.eventDate" :event-type="lead.eventType" compact />
+                </td>
+                <td>
+                  <NextActionCountdown :at="lead.nextActionAt" />
                 </td>
                 <td><StageBadge :stage="lead.stage" /></td>
                 <td v-if="canSeeOtherOwners" class="text-slate-600">{{ nameFor(lead.ownerId) }}</td>

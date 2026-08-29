@@ -24,25 +24,54 @@ export const STAGES = Object.freeze({
 export const STAGE_LIST = Object.freeze(Object.values(STAGES))
 
 /**
- * Allowed transitions. A stage always includes itself: an update that edits some other
- * field must not be rejected merely for restating the current stage.
+ * Allowed transitions — a COMPLETE graph. Every stage may move to every stage.
+ *
+ * WHY THIS IS NO LONGER A FUNNEL
+ *
+ * It used to be the §5.2 ladder: new -> contacted -> qualified -> quoted -> ... , with
+ * backwards moves forbidden. That models how a deal is SUPPOSED to progress, and it was
+ * wrong about how the data actually gets entered. The move that broke it was the most
+ * ordinary one imaginable: an agent taps the wrong column, a lead lands in `contacted`,
+ * and nothing in the product can put it back in `new`. The state machine was not
+ * preventing a bad deal — it was preventing a correction of a typo, and the only remedy on
+ * offer was to create a second lead and abandon the first one's timeline.
+ *
+ * A pipeline stage is a record of where a deal IS, not a claim about the route it took.
+ * The route is already recorded, faithfully and immutably, in the timeline: every move
+ * writes a `stage_change` activity naming both ends (P1). That is the honest audit trail,
+ * and it survives corrections in a way a locked graph never did.
+ *
+ * WHAT STILL GUARDS THE DATA
+ *
+ * Freeing the graph does NOT free the invariants, and this is the distinction that makes
+ * the change safe: `STAGE_REQUIREMENTS` below is untouched. You still cannot mark a lead
+ * `qualified` without BEDS, `won` without a deal value above zero, `lost` without a reason.
+ * Those rules are about DATA being present, not about workflow being obeyed, and they are
+ * the ones that were ever load-bearing for §8's analytics.
+ *
+ * The one remaining gate is on REOPENING — see validateTransition(). Leaving `won`, `lost`
+ * or `disqualified` moves revenue and CAC figures that people have already read, so it
+ * needs a manager. Entering them needs only the required fields, as before.
+ *
+ * A stage still includes itself: an update that edits some other field must not be
+ * rejected merely for restating the current stage.
  */
-export const TRANSITIONS = Object.freeze({
-  new: ['new', 'contacted', 'unreachable', 'disqualified'],
-  contacted: ['contacted', 'qualified', 'nurture', 'unreachable', 'lost'],
-  unreachable: ['unreachable', 'contacted', 'parked'],
-  qualified: ['qualified', 'quoted', 'nurture', 'lost'],
-  quoted: ['quoted', 'negotiation', 'won', 'lost'],
-  negotiation: ['negotiation', 'won', 'lost'],
-  nurture: ['nurture', 'contacted', 'lost'],
-  parked: ['parked', 'nurture', 'contacted'],
-  won: ['won'],
-  lost: ['lost'],
-  disqualified: ['disqualified'],
-})
+export const TRANSITIONS = Object.freeze(
+  Object.fromEntries(STAGE_LIST.map((from) => [from, Object.freeze([...STAGE_LIST])])),
+)
 
-/** Stages from which no further movement is possible. */
+/**
+ * The closed stages.
+ *
+ * Named "terminal" historically because nothing could leave them. A manager now can — see
+ * validateTransition() — but everything else these drive is unchanged: they are what
+ * `leadStatusFor` projects to a closed status, what stamps `closedAt`/`closedBy`, and what
+ * §8 counts as a finished lead.
+ */
 export const TERMINAL_STAGES = Object.freeze(['won', 'lost', 'disqualified'])
+
+/** Who may pull a lead back out of a closed stage. */
+export const REOPEN_ROLES = Object.freeze(['admin', 'manager'])
 
 /** Stages that count as an open, workable lead. Drives the work queue and pipeline value. */
 export const OPEN_STAGES = Object.freeze([
@@ -149,7 +178,7 @@ function isPresent(value) {
  * Returns { ok, code, message, missing } — never throws, because this runs on every
  * keystroke in the stage-change modal.
  */
-export function validateTransition(lead, toStage) {
+export function validateTransition(lead, toStage, { role } = {}) {
   const from = lead?.stage
 
   if (!isValidStage(from)) {
@@ -161,11 +190,20 @@ export function validateTransition(lead, toStage) {
   if (from === toStage) {
     return { ok: true, code: 'NOOP', message: '', missing: [] }
   }
-  if (isTerminal(from)) {
+  /**
+   * Reopening — the one move that is still gated, and by ROLE rather than by route.
+   *
+   * An accidental `lost` is exactly the mistake this whole change exists to make fixable,
+   * so it must be possible. But leaving a closed stage un-counts a win or a loss, which
+   * moves the revenue and CAC figures §8 publishes and someone may already have acted on.
+   * That is a decision for whoever answers for those numbers, not for whoever happened to
+   * mis-tap. An agent asks; a manager does it.
+   */
+  if (isTerminal(from) && !REOPEN_ROLES.includes(role)) {
     return {
       ok: false,
-      code: 'TERMINAL',
-      message: `This lead is ${from} and cannot be moved. Create a new lead instead.`,
+      code: 'REOPEN_FORBIDDEN',
+      message: `This lead is ${from}. Ask a manager to reopen it.`,
       missing: [],
     }
   }

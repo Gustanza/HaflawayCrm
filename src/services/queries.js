@@ -111,6 +111,64 @@ export async function urgencyBoardQuery(user, { max = 50, after } = {}) {
   })
 }
 
+/**
+ * Every lead whose `field` date falls inside [start, end) — the month grid (§12).
+ *
+ * ONE range read for the whole window, grouped by month afterwards, rather than a query per
+ * month. Twelve months of a grid is twelve months of one index scan; twelve separate
+ * queries would be twelve round trips for the same documents.
+ *
+ * WHY A RANGE ON THE DATE, NOT AN `eventMonthKey` FIELD
+ * ----------------------------------------------------
+ * The obvious design is to stamp a month key on the lead at write time and query equality
+ * on it. That needs a schema field, a backfill of every existing lead, and a rules deploy
+ * before the screen shows anything at all — and a month grid that is empty until someone
+ * remembers to run a script is a screen nobody trusts. A range over the date that is
+ * ALREADY stored is exactly as accurate, needs no migration, and cannot drift out of sync
+ * with the date it is derived from. The month bucketing happens in org time on the client
+ * (see monthSpanBounds / monthKey), which is where the timezone rules already live.
+ *
+ * `max` is a cap, not a page: the caller must say so when it is hit rather than quietly
+ * undercounting, because the whole point of this screen is that the totals are true.
+ */
+export async function leadsInDateRangeQuery(user, { field, start, end, max = 500 } = {}) {
+  assertUser(user)
+  if (!field || !start || !end) throw new Error('leadsInDateRangeQuery needs field, start and end')
+  const db = await getDb()
+
+  const clauses = [
+    where('orgId', '==', user.orgId),
+    ...ownershipScope(user),
+    where(field, '>=', start),
+    where(field, '<', end),
+    // Firestore requires the range field to be ordered first.
+    orderBy(field, 'asc'),
+    fbLimit(max),
+  ]
+
+  return query(collection(db, 'leads'), ...clauses)
+}
+
+/**
+ * Leads with no event date at all.
+ *
+ * They cannot appear in any month, and silently dropping them would make the grid's totals
+ * disagree with every other screen. A missing event date is also the single most
+ * consequential gap in this product's data (P2: the event clock drives everything), so the
+ * grid names them rather than hiding them.
+ */
+export async function undatedLeadsQuery(user, { max = 100 } = {}) {
+  assertUser(user)
+  const db = await getDb()
+  return query(
+    collection(db, 'leads'),
+    where('orgId', '==', user.orgId),
+    ...ownershipScope(user),
+    where('eventDate', '==', null),
+    fbLimit(max),
+  )
+}
+
 /** The claimable pool: leads nobody owns yet. */
 export async function unownedLeadsQuery(user, { max = 25 } = {}) {
   assertUser(user)

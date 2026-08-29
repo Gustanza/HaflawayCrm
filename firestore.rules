@@ -184,24 +184,32 @@ service cloud.firestore {
     // ---------------------------------------------------------------------
 
     function allowedNextStages(from) {
+      // A COMPLETE graph - every stage reaches every stage. Must stay identical to
+      // TRANSITIONS in src/domain/stages.js, which carries the reasoning; a test parses
+      // this block and fails the build if the two drift apart.
       return {
-        'new':          ['new', 'contacted', 'unreachable', 'disqualified'],
-        'contacted':    ['contacted', 'qualified', 'nurture', 'unreachable', 'lost'],
-        'unreachable':  ['unreachable', 'contacted', 'parked'],
-        'qualified':    ['qualified', 'quoted', 'nurture', 'lost'],
-        'quoted':       ['quoted', 'negotiation', 'won', 'lost'],
-        'negotiation':  ['negotiation', 'won', 'lost'],
-        'nurture':      ['nurture', 'contacted', 'lost'],
-        'parked':       ['parked', 'nurture', 'contacted'],
-        'won':          ['won'],
-        'lost':         ['lost'],
-        'disqualified': ['disqualified']
+        'new':          ['new', 'contacted', 'unreachable', 'qualified', 'quoted', 'negotiation', 'won', 'lost', 'parked', 'nurture', 'disqualified'],
+        'contacted':    ['new', 'contacted', 'unreachable', 'qualified', 'quoted', 'negotiation', 'won', 'lost', 'parked', 'nurture', 'disqualified'],
+        'unreachable':  ['new', 'contacted', 'unreachable', 'qualified', 'quoted', 'negotiation', 'won', 'lost', 'parked', 'nurture', 'disqualified'],
+        'qualified':    ['new', 'contacted', 'unreachable', 'qualified', 'quoted', 'negotiation', 'won', 'lost', 'parked', 'nurture', 'disqualified'],
+        'quoted':       ['new', 'contacted', 'unreachable', 'qualified', 'quoted', 'negotiation', 'won', 'lost', 'parked', 'nurture', 'disqualified'],
+        'negotiation':  ['new', 'contacted', 'unreachable', 'qualified', 'quoted', 'negotiation', 'won', 'lost', 'parked', 'nurture', 'disqualified'],
+        'nurture':      ['new', 'contacted', 'unreachable', 'qualified', 'quoted', 'negotiation', 'won', 'lost', 'parked', 'nurture', 'disqualified'],
+        'parked':       ['new', 'contacted', 'unreachable', 'qualified', 'quoted', 'negotiation', 'won', 'lost', 'parked', 'nurture', 'disqualified'],
+        'won':          ['new', 'contacted', 'unreachable', 'qualified', 'quoted', 'negotiation', 'won', 'lost', 'parked', 'nurture', 'disqualified'],
+        'lost':         ['new', 'contacted', 'unreachable', 'qualified', 'quoted', 'negotiation', 'won', 'lost', 'parked', 'nurture', 'disqualified'],
+        'disqualified': ['new', 'contacted', 'unreachable', 'qualified', 'quoted', 'negotiation', 'won', 'lost', 'parked', 'nurture', 'disqualified']
       }.get(from, []);
     }
 
     function stageTransitionValid() {
       return unchanged('stage')
-          || incoming().stage in allowedNextStages(existing().stage);
+          || (incoming().stage in allowedNextStages(existing().stage)
+              // REOPENING. The graph no longer polices the route a deal takes, but leaving
+              // a closed stage un-counts a win or a loss and moves figures 8 has already
+              // published. Entering a closed stage still needs only the required fields
+              // (closureFieldsPresent below); pulling one back out needs a manager.
+              && (!(existing().stage in ['won', 'lost', 'disqualified']) || isManager()));
     }
 
     // Closing a lead demands the fields the analytics layer depends on (§5.2 invariants).
@@ -442,7 +450,12 @@ service cloud.firestore {
                     // Only a manager may unilaterally claim a lead out of the pool.
                     && (unchanged('previousOwnerIds') || isManager());
 
-      allow delete: if false; // soft delete via deletedAt
+      // HARD DELETE — admin only, and deliberately an exception to the soft-delete policy
+      // in TODO.md 249. `deleteLead()` in leads.service.js empties every subcollection
+      // FIRST and removes this document LAST, precisely because the child rules below
+      // require this document to still exist. Reversing that order strands children that
+      // nothing can then delete.
+      allow delete: if isAdmin() && readingMyOrg();
 
       // -----------------------------------------------------------------
       // activities — APPEND-ONLY. TODO.md P1 and P4.
@@ -471,7 +484,11 @@ service cloud.firestore {
                       && incoming().voidedAt == request.time
                       && onlyChanged(['isVoided', 'voidedBy', 'voidReason', 'voidedAt']);
 
-        allow delete: if false;
+        // Append-only for everyone EXCEPT an admin destroying the whole lead. A timeline
+        // cannot outlive the lead it documents: left behind it is unreachable, permanently
+        // undeletable, and still holds the customer's words. `canReadLeadById` pins this to
+        // the parent's org, since an activity carries no orgId of its own.
+        allow delete: if isAdmin() && canReadLeadById(leadId);
       }
 
       match /contacts/{contactId} {
@@ -485,7 +502,10 @@ service cloud.firestore {
         // A quote that has been sent is a statement to a customer; it may only progress.
         allow update: if canWriteLeadById(leadId) && updateStamped()
                       && (existing().status != 'sent' || incoming().status != 'draft');
-        allow delete: if canWriteLeadById(leadId) && existing().status == 'draft';
+        // A sent quote is a statement to a customer and normally cannot be deleted. The
+        // admin cascade is the exception, for the same reason as activities above.
+        allow delete: if (canWriteLeadById(leadId) && existing().status == 'draft')
+                      || (isAdmin() && canReadLeadById(leadId));
       }
     }
 
@@ -668,6 +688,27 @@ service cloud.firestore {
                     && (isManager() || (isActive() && existing().createdBy == uid()));
       allow create: if isManager() && inMyOrg() && createStamped();
       allow update: if isManager() && readingMyOrg();
+      allow delete: if false;
+    }
+
+    // ---------------------------------------------------------------------
+    // leadDeletions - the tombstone left by a hard delete.
+    //
+    // One document per deleted lead, keyed by the dead leadId. It is how a CAC figure that
+    // moved can be explained months later, so it must outlive everyone's ability to edit
+    // it: create and complete only, never delete, and no route to rewriting the reason or
+    // the actor. Deliberately holds NO PII - see deleteLead() in leads.service.js.
+    // ---------------------------------------------------------------------
+    match /leadDeletions/{leadId} {
+      allow read:   if isAdmin() && readingMyOrg();
+      allow create: if isAdmin() && inMyOrg()
+                    && incoming().deletedBy == uid()
+                    && incoming().leadId == leadId
+                    && incoming().reason is string
+                    && incoming().reason.size() > 0;
+      // The second write only fills in the outcome. Who, why and when are already sealed.
+      allow update: if isAdmin() && readingMyOrg()
+                    && onlyChanged(['removed', 'phoneReleased', 'completedAt']);
       allow delete: if false;
     }
 

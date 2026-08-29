@@ -53,5 +53,30 @@ export const CALL_OUTCOMES = Object.freeze([
   'callback_requested',
 ])
 
+/**
+ * The i18n message key for a stored outcome token.
+ *
+ * The tokens are snake_case because that is the house style for stored enums; the message
+ * keys are camelCase because that is the house style for i18n. Something has to bridge
+ * them, and until now three places each did it their own way - an array in
+ * LogActivityDialog, a four-deep nested ternary inside a LeadDetailView template, and any
+ * new caller that had to rediscover the problem. A third caller got it wrong and rendered
+ * the raw key `activity.outcome.no_answer` to the user, which is what prompted this.
+ *
+ * Returns the full key so callers cannot forget the prefix.
+ */
+const OUTCOME_MESSAGE_KEYS = Object.freeze({
+  spoke: 'spoke',
+  no_answer: 'noAnswer',
+  busy: 'busy',
+  switched_off: 'switchedOff',
+  wrong_number: 'wrongNumber',
+  callback_requested: 'callbackRequested',
+})
+
+export function outcomeMessageKey(outcome) {
+  return `activity.outcome.${OUTCOME_MESSAGE_KEYS[outcome] ?? outcome}`
+}
+
 /** Budget bands, TZS. `unknown` is an explicit "not yet established", not a null. */
 export const BUDGET_BANDS = Object.freeze(['unknown', '<50k', '50-150k', '150-500k', '500k+'])

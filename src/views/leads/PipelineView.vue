@@ -17,25 +17,30 @@
  * worse than a long column.
  */
 import { computed, reactive, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth.js'
 import { useUiStore } from '@/stores/ui.js'
 import { useCollection } from '@/composables/useCollection.js'
 import { useNow } from '@/composables/useNow.js'
+import { useStageMessage } from '@/composables/useStageMessage.js'
 import { useUserNames } from '@/composables/useUserNames.js'
 import { leadsQuery } from '@/services/queries.js'
 import { changeStage } from '@/services/leads.service.js'
 import { BOARD_ORDER, validateTransition, canTransition, nextStages } from '@/domain/stages.js'
 import { formatMoney } from '@/domain/money.js'
-import { priorityScore } from '@/domain/scoring.js'
+import { priorityScore, followUpBucket } from '@/domain/scoring.js'
 import PageHeader from '@/components/layout/PageHeader.vue'
 import EventCountdown from '@/components/leads/EventCountdown.vue'
+import NextActionCountdown from '@/components/leads/NextActionCountdown.vue'
 import LoadingRows from '@/components/ui/LoadingRows.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
 import ShowMoreButton from '@/components/ui/ShowMoreButton.vue'
 
 const auth = useAuthStore()
 const ui = useUiStore()
+const router = useRouter()
+const { messageFor, isFixable } = useStageMessage()
 const { t } = useI18n()
 
 const user = computed(() => ({
@@ -124,10 +129,34 @@ const isEmpty = computed(() => loaded.value && items.value.length === 0)
 const dragging = ref(null)
 const moveTarget = ref(null)
 
-/** Highlight only the columns this lead may legally move to (§5.2). */
+/**
+ * A card is too small for a second countdown, so the board shows only the ALARM: a deal
+ * whose promised callback has already passed. That is the one thing a manager scanning
+ * eight columns needs to spot — a card sitting in "Negotiating" that nobody has rung back
+ * is how a deal dies quietly. Everything else about the follow-up clock stays on the
+ * screens that have room for it.
+ */
+function followUpOverdue(lead) {
+  return followUpBucket(lead.nextActionAt, now.value) === 'overdue'
+}
+
+/**
+ * Where the dragged lead may land.
+ *
+ * This used to be `nextStages()` — the handful of columns the old funnel permitted — and
+ * the highlight carried real information because most columns were refused. Every column
+ * is reachable now, so highlighting "legal" ones would ring the entire board and say
+ * nothing. What is still worth showing is the one exception: an agent cannot pull a lead
+ * OUT of a closed stage, so for them a closed lead lights up nothing and the board says
+ * so rather than accepting the drop and failing afterwards.
+ */
 const legalTargets = computed(() => {
   const lead = dragging.value ?? moveTarget.value
-  return lead ? nextStages(lead.stage) : []
+  if (!lead) return []
+  return nextStages(lead.stage).filter(
+    (to) => validateTransition({ ...lead, stage: lead.stage }, to, { role: auth.role }).code
+      !== 'REOPEN_FORBIDDEN',
+  )
 })
 
 async function moveTo(lead, stage) {
@@ -135,11 +164,18 @@ async function moveTo(lead, stage) {
   moveTarget.value = null
   if (!lead || lead.stage === stage) return
 
-  const check = validateTransition(lead, stage)
+  const check = validateTransition(lead, stage, { role: auth.role })
   if (!check.ok) {
-    // A sentence the user can act on — "Fill in lossReason before moving to lost" — not a
-    // permission error. Stages needing extra fields are completed on the lead detail screen.
-    ui.warn(check.message || t('pipeline.cannotMove'))
+    ui.warn(messageFor(check, stage))
+    /**
+     * "Add the deal value before moving to Won" was true and useless: there is nowhere
+     * on a kanban board to add one, so the board named a form the user could not reach
+     * and then dropped them back where they started. When the block is something a
+     * form can clear, take them to the form with the target stage already selected.
+     */
+    if (isFixable(check)) {
+      router.push({ name: 'lead-detail', params: { id: lead.id }, query: { stage } })
+    }
     return
   }
 
@@ -147,7 +183,10 @@ async function moveTo(lead, stage) {
     await changeStage({
       lead,
       toStage: stage,
-      user: { uid: auth.uid, displayName: auth.displayName },
+      // The role is what permits reopening a closed lead. Omitting it made
+      // changeStage re-validate as an anonymous caller and refuse the very move this
+      // screen had just approved — the board said yes, the service said no.
+      user: { uid: auth.uid, displayName: auth.displayName, role: auth.role },
     })
     ui.success(t('detail.stageChanged', { stage: t(`stage.${stage}`) }))
     load()
@@ -206,60 +245,76 @@ function onDrop(stage) {
             </p>
           </header>
 
-          <div class="space-y-2">
-            <table v-if="column.leads.length" class="data-table text-xs w-full">
-              <thead>
-                <tr>
-                  <th>{{ $t('leads.name') }}</th>
-                  <th class="text-right">{{ $t('leads.dealValue') }}</th>
-                  <th class="text-right"><span class="sr-only">{{ $t('leads.actions') }}</span></th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr
-                  v-for="lead in column.leads"
-                  :key="lead.id"
-                  class="cursor-grab active:cursor-grabbing"
-                  draggable="true"
-                  @dragstart="dragging = lead"
-                  @dragend="dragging = null"
-                >
-                  <td class="max-w-0">
-                    <RouterLink
-                      :to="{ name: 'lead-detail', params: { id: lead.id } }"
-                      class="block font-medium text-slate-900 hover:text-brand-700 truncate"
-                    >
-                      {{ lead.displayName || $t('lead.unnamed') }}
-                    </RouterLink>
-                    <div class="mt-0.5">
-                      <EventCountdown :event-date="lead.eventDate" compact />
-                    </div>
-                    <p v-if="canSeeOtherOwners" class="mt-0.5 text-slate-500 truncate">
-                      {{ nameFor(lead.ownerId) }}
-                    </p>
-                  </td>
-                  <td class="num align-top">
-                    {{ lead.dealValueMinor ? formatMoney(lead.dealValueMinor, lead.currency) : '—' }}
-                  </td>
-                  <td class="text-right align-top">
-                    <!-- Touch path: dragging a row on a phone fights the scroll container. -->
-                    <button
-                      v-if="nextStages(lead.stage).length"
-                      type="button"
-                      class="icon-btn"
-                      :aria-label="`${$t('pipeline.move')} ${lead.displayName}`"
-                      @click="moveTarget = lead"
-                    >
-                      <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                           stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                        <path d="M5 12h14M13 6l6 6-6 6" />
-                      </svg>
-                    </button>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+          <!--
+            CARDS, NOT TABLE ROWS.
 
+            This column was a `.data-table` with its own `<thead>`, and that header was the
+            whole problem: "Deal value" reserved width for the WORDS, not for the values,
+            on a 288px column where most values are blank. The name cell was left on
+            `max-w-0` and everything inside it wrapped — a date countdown broken across
+            three lines, an overdue pill across two. The countdown also inherited `text-sm`
+            against the table's `text-xs`, so the least important thing on the card was the
+            largest. And a bare `<tr>` gives a dragging hand nothing to aim at.
+
+            A kanban card is a card. It sizes to its own content, needs no repeated column
+            headers, and looks grabbable.
+          -->
+          <ul v-if="column.leads.length" class="space-y-2">
+            <li
+              v-for="lead in column.leads"
+              :key="lead.id"
+              class="rounded-lg bg-white p-2.5 shadow-sm ring-1 ring-slate-200 transition
+                     cursor-grab hover:ring-slate-300 active:cursor-grabbing"
+              :class="dragging && dragging.id === lead.id ? 'opacity-40' : ''"
+              draggable="true"
+              @dragstart="dragging = lead"
+              @dragend="dragging = null"
+            >
+              <div class="flex items-start gap-1">
+                <RouterLink
+                  :to="{ name: 'lead-detail', params: { id: lead.id } }"
+                  class="min-w-0 flex-1 truncate text-sm font-semibold text-slate-900 hover:text-brand-700"
+                >
+                  {{ lead.displayName || $t('lead.unnamed') }}
+                </RouterLink>
+
+                <!-- Touch path: dragging a card on a phone fights the scroll container. -->
+                <button
+                  v-if="nextStages(lead.stage).length"
+                  type="button"
+                  class="icon-btn -mr-1 -mt-1 shrink-0"
+                  :aria-label="`${$t('pipeline.move')} ${lead.displayName}`"
+                  @click="moveTarget = lead"
+                >
+                  <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                       stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M5 12h14M13 6l6 6-6 6" />
+                  </svg>
+                </button>
+              </div>
+
+              <div class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
+                <EventCountdown :event-date="lead.eventDate" compact />
+                <NextActionCountdown v-if="followUpOverdue(lead)" :at="lead.nextActionAt" />
+              </div>
+
+              <!-- Only rendered when there is something to say. An em-dash in every deal
+                   value slot is eight columns of visual noise carrying no information. -->
+              <div
+                v-if="lead.dealValueMinor || (canSeeOtherOwners && lead.ownerId)"
+                class="mt-1.5 flex items-baseline gap-2 text-xs"
+              >
+                <span v-if="lead.dealValueMinor" class="font-medium tabular-nums text-slate-700">
+                  {{ formatMoney(lead.dealValueMinor, lead.currency) }}
+                </span>
+                <span v-if="canSeeOtherOwners" class="ml-auto truncate text-slate-500">
+                  {{ nameFor(lead.ownerId) }}
+                </span>
+              </div>
+            </li>
+          </ul>
+
+          <div class="mt-2 space-y-2">
             <p v-if="!column.total" class="px-2 py-6 text-center text-xs text-slate-400">
               {{ $t('pipeline.emptyColumn') }}
             </p>

@@ -26,12 +26,14 @@ import { useCollection } from '@/composables/useCollection.js'
 import { useNow } from '@/composables/useNow.js'
 import { useUserNames } from '@/composables/useUserNames.js'
 import { leadsQuery } from '@/services/queries.js'
-import { priorityScore } from '@/domain/scoring.js'
-import { daysToEvent, toDate, dayKey } from '@/domain/periods.js'
+import { priorityScore, followUpBucket } from '@/domain/scoring.js'
+import { daysToEvent, toDate } from '@/domain/periods.js'
 import { formatPhone, toTelLink, toWhatsAppLink } from '@/domain/phone.js'
 import PageHeader from '@/components/layout/PageHeader.vue'
 import StageBadge from '@/components/leads/StageBadge.vue'
 import EventCountdown from '@/components/leads/EventCountdown.vue'
+import NextActionCountdown from '@/components/leads/NextActionCountdown.vue'
+import LastContact from '@/components/leads/LastContact.vue'
 import LogActivityDialog from '@/components/leads/LogActivityDialog.vue'
 import LoadingRows from '@/components/ui/LoadingRows.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
@@ -86,15 +88,18 @@ const ranked = computed(() =>
     .map((entry) => entry.lead),
 )
 
-const today = computed(() => dayKey(now.value))
-
+/**
+ * Shared with the lead list, so the two screens can never disagree about what "overdue"
+ * means (see followUpBucket in scoring.js).
+ *
+ * The one local rule: a lead with NO reminder set falls in with "Coming up" here. The
+ * domain function reports that as its own 'none' bucket, which is the truthful answer, but
+ * this screen has always shown unscheduled leads as work to pick up rather than hiding
+ * them, and it is the only screen an agent has. Changing that is a separate decision.
+ */
 function bucketOf(lead) {
-  const next = toDate(lead.nextActionAt)
-  if (!next) return 'upcoming'
-  if (next.getTime() < now.value.getTime()) return 'overdue'
-  if (dayKey(next) === today.value) return 'today'
-  const days = daysToEvent(lead.nextActionAt, now.value)
-  return days !== null && days <= 7 ? 'upcoming' : 'later'
+  const bucket = followUpBucket(lead.nextActionAt, now.value)
+  return bucket === 'none' ? 'upcoming' : bucket
 }
 
 const overdue = computed(() => ranked.value.filter((l) => bucketOf(l) === 'overdue'))
@@ -129,10 +134,16 @@ const pagers = {
   upcoming: usePagination(upcoming, { pageSize: SECTION_PAGE_SIZE }),
 }
 
+/**
+ * `wrap` tints the table's own edge, not just the heading above it. A section heading and
+ * the card under it reading as two unrelated objects is what made this screen look
+ * assembled rather than designed — and the colour is doing real work here, since §10.2
+ * wants Overdue to be the loudest thing on the page.
+ */
 const SECTION_STYLE = {
-  overdue: { heading: 'text-rose-700', badge: 'bg-rose-600 text-white' },
-  today: { heading: 'text-slate-800', badge: 'bg-slate-700 text-white' },
-  upcoming: { heading: 'text-slate-600', badge: 'bg-slate-200 text-slate-700' },
+  overdue: { heading: 'text-rose-700', badge: 'bg-rose-600 text-white', wrap: 'ring-rose-200' },
+  today: { heading: 'text-slate-800', badge: 'bg-slate-700 text-white', wrap: '' },
+  upcoming: { heading: 'text-slate-600', badge: 'bg-slate-200 text-slate-700', wrap: '' },
 }
 
 function section(id, leads) {
@@ -267,7 +278,7 @@ function whatsappLink(lead) {
       <section v-for="s in sections" :key="s.id" :aria-labelledby="`q-${s.id}`">
         <h2
           :id="`q-${s.id}`"
-          class="mb-2 flex items-center gap-2 text-sm font-semibold"
+          class="mb-2.5 flex items-center gap-2 text-sm font-semibold tracking-tight"
           :class="s.heading"
         >
           <span
@@ -277,13 +288,16 @@ function whatsappLink(lead) {
           {{ s.label }}
         </h2>
 
-        <div class="data-table-wrap">
-          <table class="data-table min-w-[46rem]">
+        <div class="data-table-wrap" :class="s.wrap">
+          <table class="data-table min-w-[56rem]">
             <thead>
               <tr>
                 <th>{{ $t('leads.name') }}</th>
                 <th>{{ $t('leads.event') }}</th>
                 <th>{{ $t('leads.stage') }}</th>
+                <!-- Between the stage and the clock, because it is what turns "overdue"
+                     into an instruction. -->
+                <th>{{ $t('lastContact.heading') }}</th>
                 <th v-if="canSeeOtherOwners">{{ $t('leads.owner') }}</th>
                 <th>{{ $t('queue.due') }}</th>
                 <th>{{ $t('leads.phone') }}</th>
@@ -295,7 +309,7 @@ function whatsappLink(lead) {
                 <td>
                   <RouterLink
                     :to="{ name: 'lead-detail', params: { id: lead.id } }"
-                    class="font-medium text-slate-900 hover:text-brand-700"
+                    class="font-semibold text-slate-900 hover:text-brand-700"
                   >
                     {{ lead.displayName || $t('lead.unnamed') }}
                   </RouterLink>
@@ -304,8 +318,16 @@ function whatsappLink(lead) {
                   <EventCountdown :event-date="lead.eventDate" :event-type="lead.eventType" compact />
                 </td>
                 <td><StageBadge :stage="lead.stage" /></td>
+                <td class="max-w-[18rem]"><LastContact :lead="lead" /></td>
                 <td v-if="canSeeOtherOwners" class="text-slate-600">{{ nameFor(lead.ownerId) }}</td>
-                <td :class="s.id === 'overdue' ? 'text-rose-700 font-medium' : 'text-slate-600'">
+                <!-- Overdue gets the pill, not tinted text: §13 puts this screen outdoors
+                     on a cheap LCD, where rose-700 on white is the first thing to wash out.
+                     Today and Coming up keep an absolute time — an agent planning their day
+                     wants "14:30", not "in 5h". -->
+                <td v-if="s.id === 'overdue'">
+                  <NextActionCountdown :at="lead.nextActionAt" />
+                </td>
+                <td v-else class="text-slate-600">
                   {{ dueLabel(lead, s.id) }}
                 </td>
                 <td class="text-slate-600 tabular-nums">

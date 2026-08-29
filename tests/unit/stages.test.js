@@ -72,17 +72,41 @@ describe('stage constants', () => {
   })
 })
 
-describe('terminal stages are genuinely terminal', () => {
-  it('allows no exit but itself', () => {
+describe('closed stages are reopenable, but only by a manager', () => {
+  // These stages used to be dead ends for everyone. They are not any more: an accidental
+  // "lost" was unfixable, and the only remedy on offer was to abandon the lead's timeline
+  // and re-key it. What guards them now is a ROLE, because leaving a closed stage
+  // un-counts a win or a loss and moves figures 8 has already published.
+  it('offers a way out, so an accidental close is correctable', () => {
     for (const stage of TERMINAL_STAGES) {
-      expect(nextStages(stage), `${stage} should be a dead end`).toEqual([])
+      expect(nextStages(stage), `${stage} should be escapable`).not.toEqual([])
     }
   })
 
-  it('refuses to reopen a won lead', () => {
-    const r = validateTransition({ stage: 'won' }, 'negotiation')
+  it('refuses an agent reopening a won lead', () => {
+    const r = validateTransition({ stage: 'won' }, 'negotiation', { role: 'agent' })
     expect(r.ok).toBe(false)
-    expect(r.code).toBe('TERMINAL')
+    expect(r.code).toBe('REOPEN_FORBIDDEN')
+    expect(r.message, 'must say who CAN do it').toMatch(/manager/i)
+  })
+
+  it('refuses when no role is supplied at all — closed by default', () => {
+    expect(validateTransition({ stage: 'lost' }, 'contacted').code).toBe('REOPEN_FORBIDDEN')
+  })
+
+  it('lets a manager and an admin reopen', () => {
+    for (const role of ['manager', 'admin']) {
+      const r = validateTransition({ stage: 'lost' }, 'contacted', { role })
+      expect(r.ok, `${role} should be able to reopen`).toBe(true)
+    }
+  })
+
+  it('still demands the entry requirements of wherever it is reopened INTO', () => {
+    // Reopening is not a bypass: moving a lost lead straight to `qualified` still needs
+    // BEDS, exactly as it would from any other stage.
+    const r = validateTransition({ stage: 'lost' }, 'qualified', { role: 'admin' })
+    expect(r.ok).toBe(false)
+    expect(r.code).toBe('MISSING_FIELDS')
   })
 })
 
@@ -127,16 +151,28 @@ describe('canTransition', () => {
     expect(canTransition('parked', 'contacted')).toBe(true)
   })
 
-  it('blocks skipping the funnel', () => {
-    expect(canTransition('new', 'won')).toBe(false)
-    expect(canTransition('new', 'quoted')).toBe(false)
-    expect(canTransition('contacted', 'won')).toBe(false)
+  it('permits moving BACKWARDS — the correction the funnel used to forbid', () => {
+    // The reported bug, in one line: a lead tapped into `contacted` by mistake could not
+    // be put back. The stage records where a deal is, not the route it took; the route is
+    // in the timeline, where a correction cannot erase it.
+    expect(canTransition('contacted', 'new')).toBe(true)
+    expect(canTransition('quoted', 'contacted')).toBe(true)
+    expect(canTransition('negotiation', 'qualified')).toBe(true)
   })
 
-  it('blocks resurrection from terminal stages', () => {
-    expect(canTransition('won', 'lost')).toBe(false)
-    expect(canTransition('lost', 'contacted')).toBe(false)
-    expect(canTransition('disqualified', 'new')).toBe(false)
+  it('permits skipping ahead — the DATA requirements are what gate a jump', () => {
+    // canTransition only answers "is this route allowed". Whether a lead may actually
+    // BECOME won is validateTransition's business, and it still refuses without a deal
+    // value — see the requirement suites below.
+    expect(canTransition('new', 'won')).toBe(true)
+    expect(canTransition('new', 'quoted')).toBe(true)
+    expect(validateTransition({ stage: 'new' }, 'won', { role: 'admin' }).ok).toBe(false)
+  })
+
+  it('permits leaving a closed stage, with the role check applied separately', () => {
+    expect(canTransition('won', 'lost')).toBe(true)
+    expect(canTransition('lost', 'contacted')).toBe(true)
+    expect(canTransition('disqualified', 'new')).toBe(true)
   })
 
   it('is false for garbage rather than throwing', () => {
@@ -248,8 +284,11 @@ describe('validateTransition — BEDS gating, §5.3', () => {
     expect(validateTransition(null, 'won').ok).toBe(false)
   })
 
-  it('reports an illegal transition distinctly from missing fields', () => {
-    expect(validateTransition({ stage: 'new' }, 'won').code).toBe('ILLEGAL_TRANSITION')
+  it('reports a bad stage NAME distinctly from missing fields', () => {
+    // ILLEGAL_TRANSITION is no longer reachable from a real stage pair now that the graph
+    // is complete, but the codes stay distinct: a typo is not a missing field.
+    expect(validateTransition({ stage: 'new' }, 'nope').code).toBe('INVALID_TARGET')
+    expect(validateTransition({ stage: 'new' }, 'won').code).toBe('MISSING_FIELDS')
   })
 })
 

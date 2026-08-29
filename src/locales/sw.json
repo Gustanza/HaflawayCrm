@@ -77,6 +77,7 @@
     "leads": "Wateja tarajiwa",
     "newLead": "Mteja mpya",
     "lead": "Mteja tarajiwa",
+    "months": "Miezi",
     "pipeline": "Hatua za mauzo",
     "urgency": "Matukio ya karibu",
     "campaigns": "Matangazo",
@@ -243,6 +244,7 @@
     "searchLabel": "Tafuta mteja",
     "searchPlaceholder": "Tafuta kwa jina au namba…",
     "all": "Wote",
+    "revealClosed": "{count} waliofungwa wamefichwa — onyesha",
     "showClosed": "Onyesha waliofungwa",
     "noMatches": "Hakuna aliyepatikana",
     "noMatchesBody": "Jaribu jina lingine au ondoa vichujio.",
@@ -257,7 +259,100 @@
     "stage": "Hatua",
     "dealValue": "Thamani",
     "phone": "Simu",
-    "actions": "Vitendo"
+    "actions": "Vitendo",
+    "nextAction": "Hatua ijayo",
+    "sortByNextAction": "Panga kwa hatua ijayo, ya karibu kwanza",
+    "filterStage": "Hatua",
+    "filterFollowUp": "Ufuatiliaji",
+    "filterEvent": "Tukio",
+    "sortByEvent": "Panga kwa tarehe ya tukio, la karibu kwanza",
+    "dueOverdue": "Zimechelewa",
+    "dueToday": "Za leo",
+    "dueUpcoming": "Za wiki hii",
+    "dueNone": "Hakuna kikumbusho"
+  },
+  "nextAction": {
+    "overdueNow": "Imechelewa",
+    "overdueHours": "Imechelewa saa {count}",
+    "overdueDays": "Imechelewa siku {count}",
+    "dueMinutes": "Baada ya dakika {count}",
+    "dueHours": "Baada ya saa {count}",
+    "tomorrow": "Kesho {time}",
+    "dueDays": "Baada ya siku {count}"
+  },
+  "deleteLead": {
+    "dangerZone": "Eneo la hatari",
+    "dangerHelp": "Kufuta huondoa mteja huyu na historia yake yote. Haiwezi kurudishwa.",
+    "action": "Futa mteja",
+    "title": "Futa mteja huyu kabisa",
+    "subtitle": "{name} na kila kitu kilichoandikwa kwake.",
+    "willRemove": "Vitakavyoondolewa",
+    "theLead": "Taarifa za mteja mwenyewe",
+    "phoneLock": "Namba ya simu itaachiwa huru ili iweze kusajiliwa tena",
+    "irreversible": "Hakuna kurudisha, wala nakala inayobaki.",
+    "cacWarning": "Mteja huyu amefanikiwa. Kampeni yake itabaki na matumizi yake lakini itapoteza mauzo moja, hivyo gharama ya kupata mteja kwa kampeni hiyo itabadilika.",
+    "count": {
+      "activities": "Kumbukumbu {count} za mawasiliano (simu, maelezo, majibu)",
+      "contacts": "Anwani {count} zilizohifadhiwa",
+      "quotes": "Bei {count} zilizotolewa"
+    },
+    "reason": "Kwa nini unafuta?",
+    "reasonPlaceholder": "mfano: amejirudia mara mbili",
+    "reasonHelp": "Huhifadhiwa kwenye kumbukumbu ya ufutaji. Taarifa za mteja hazihifadhiwi.",
+    "typeName": "Andika {name} kuthibitisha",
+    "confirm": "Futa kabisa",
+    "deleting": "Inafuta…",
+    "done": "Mteja amefutwa",
+    "offline": "Huna mtandao. Ufutaji hauwezi kupangwa — rudi mtandaoni kisha ujaribu tena.",
+    "step": {
+      "activities": "Inaondoa kumbukumbu…",
+      "contacts": "Inaondoa anwani…",
+      "quotes": "Inaondoa bei…",
+      "phoneIndex": "Inaachia namba ya simu…",
+      "lead": "Inaondoa mteja…"
+    }
+  },
+  "stageMove": {
+    "missing": "Weka {fields} kabla ya kuhamishia {stage}.",
+    "zeroValue": "Mauzo yaliyofanikiwa yanahitaji thamani zaidi ya sifuri.",
+    "reopenForbidden": "Mteja huyu amefungwa. Muombe meneja aifungue tena.",
+    "fillItIn": "Tunafungua taarifa za mteja ili uweze kuiweka."
+  },
+  "fieldName": {
+    "dealValueMinor": "thamani ya mauzo",
+    "lossReason": "sababu ya kupoteza",
+    "parkReason": "sababu ya kusimamisha",
+    "eventDate": "tarehe ya tukio",
+    "qualification_budgetBand": "bajeti",
+    "qualification_decisionMakerContactId": "mwamuzi"
+  },
+  "lastContact": {
+    "heading": "Mawasiliano ya mwisho",
+    "attempts": "· majaribio {count}, hapokei"
+  },
+  "months": {
+    "groupBy": "Panga kwa",
+    "mode": {
+      "event": "Mwezi wa tukio",
+      "created": "Mwezi wa kusajili"
+    },
+    "subtitle": {
+      "event": "Wateja {count} wenye matukio katika kipindi hiki",
+      "created": "Wateja {count} waliosajiliwa katika kipindi hiki"
+    },
+    "month": "Mwezi",
+    "total": "Jumla",
+    "current": "sasa",
+    "today": "Leo",
+    "earlier": "Miezi iliyopita",
+    "later": "Miezi ijayo",
+    "showLost": "Jumuisha waliopotea",
+    "noDate": "Hakuna tarehe ya tukio",
+    "noDateHelp": "Hawa hawana mwezi hadi tarehe iwekwe.",
+    "needsIndex": "Ukurasa huu unahitaji index ya hifadhidata ambayo bado haijaundwa.",
+    "needsIndexHelp": "Msimamizi anatakiwa kusambaza Firestore indexes. Kujaribu tena hakutasaidia hadi hapo.",
+    "none": "Hakuna kitu katika kipindi hiki",
+    "noneBody": "Jaribu kipindi kingine, au badilisha msingi wa kupanga miezi."
   },
   "detail": {
     "notFound": "Mteja hakupatikana.",
@@ -277,6 +372,11 @@
     "decisionMakerPlaceholder": "Nani anaamua?",
     "timeline": "Historia",
     "noActivity": "Bado hakuna kilichoandikwa.",
+    "correct": "Rekebisha",
+    "correctPrompt": "Kumbukumbu hii itabaki kwenye rekodi, ikiwa imepigwa mstari. Kulikuwa na tatizo gani?",
+    "correctPlaceholder": "mfano: niliandika kwa mteja asiye sahihi",
+    "correctConfirm": "Ondoa kumbukumbu",
+    "corrected": "Kumbukumbu imeondolewa",
     "voided": "Imefutwa: {reason}"
   },
   "activityType": {

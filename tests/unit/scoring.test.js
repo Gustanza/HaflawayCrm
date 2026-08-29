@@ -7,6 +7,8 @@ import {
   engagementScore,
   priorityScore,
   recomputeScores,
+  followUpBucket,
+  followUpLabel,
 } from '../../src/domain/scoring.js'
 
 const NOW = new Date('2026-08-24T09:00:00+03:00')
@@ -230,5 +232,93 @@ describe('recomputeScores', () => {
     const result = recomputeScores({ qualification: {} }, NOW)
     expect(result.daysToEvent).toBeNull()
     expect(result.urgencyScore).toBe(10)
+  })
+})
+
+
+/* ---------------------------------------------------------------------------
+ * The follow-up clock — nextActionAt (§10.2)
+ *
+ * The bug these exist to prevent: "remind me in 2 hours" was saved correctly and then
+ * rendered nowhere, because every clock in the UI was calendar-day based and two hours is
+ * zero days. Sub-day resolution is the whole point of these two functions.
+ * ------------------------------------------------------------------------- */
+
+const inHours = (n) => new Date(NOW.getTime() + n * 60 * 60 * 1000)
+const inMinutes = (n) => new Date(NOW.getTime() + n * 60 * 1000)
+
+describe('followUpBucket', () => {
+  it('reports an unset reminder as its own bucket, not as far-off work', () => {
+    expect(followUpBucket(null, NOW)).toBe('none')
+    expect(followUpBucket(undefined, NOW)).toBe('none')
+  })
+
+  it('separates overdue, today, this week and later', () => {
+    expect(followUpBucket(inMinutes(-1), NOW)).toBe('overdue')
+    expect(followUpBucket(inDays(-3), NOW)).toBe('overdue')
+    expect(followUpBucket(inHours(2), NOW)).toBe('today')
+    expect(followUpBucket(inDays(1), NOW)).toBe('upcoming')
+    expect(followUpBucket(inDays(7), NOW)).toBe('upcoming')
+    expect(followUpBucket(inDays(8), NOW)).toBe('later')
+  })
+
+  it('buckets on the ORG calendar day, not the host timezone', () => {
+    // 23:30 in Dar es Salaam is still today there, and already tomorrow in UTC+4.
+    expect(followUpBucket(new Date('2026-08-24T23:30:00+03:00'), NOW)).toBe('today')
+    expect(followUpBucket(new Date('2026-08-25T00:30:00+03:00'), NOW)).toBe('upcoming')
+  })
+
+  it('accepts a Firestore Timestamp', () => {
+    const stamp = { toDate: () => inHours(3) }
+    expect(followUpBucket(stamp, NOW)).toBe('today')
+  })
+})
+
+describe('followUpLabel', () => {
+  it('says nothing when nothing is scheduled', () => {
+    expect(followUpLabel(null, NOW)).toBeNull()
+  })
+
+  it('resolves the 2-hour snooze in hours — the case a day count silently swallowed', () => {
+    expect(followUpLabel(inHours(2), NOW)).toMatchObject({
+      bucket: 'today',
+      key: 'dueHours',
+      count: 2,
+    })
+  })
+
+  it('drops to minutes inside the hour', () => {
+    expect(followUpLabel(inMinutes(20), NOW)).toMatchObject({ key: 'dueMinutes', count: 20 })
+    // Never "in 0 min": the reminder has not passed yet, and saying so would be a lie.
+    expect(followUpLabel(inMinutes(0.2), NOW)).toMatchObject({ key: 'dueMinutes', count: 1 })
+  })
+
+  it('asks the caller for a formatted time on the tomorrow case', () => {
+    const label = followUpLabel(new Date('2026-08-25T09:00:00+03:00'), NOW)
+    expect(label).toMatchObject({ bucket: 'upcoming', key: 'tomorrow', withTime: true })
+    expect(label.count).toBeUndefined()
+  })
+
+  it('counts days once the reminder is more than a day out', () => {
+    expect(followUpLabel(inDays(3), NOW)).toMatchObject({ key: 'dueDays', count: 3 })
+    expect(followUpLabel(inDays(30), NOW)).toMatchObject({ bucket: 'later', key: 'dueDays', count: 30 })
+  })
+
+  it('reads under an hour late as "overdue", not as a precise count', () => {
+    expect(followUpLabel(inMinutes(-7), NOW)).toMatchObject({
+      bucket: 'overdue',
+      key: 'overdueNow',
+    })
+  })
+
+  it('counts hours then days once genuinely late', () => {
+    expect(followUpLabel(inHours(-5), NOW)).toMatchObject({ key: 'overdueHours', count: 5 })
+    expect(followUpLabel(inDays(-3), NOW)).toMatchObject({ key: 'overdueDays', count: 3 })
+  })
+
+  it('never reports being overdue by zero days', () => {
+    // 25 hours late is one calendar day, not zero — the boundary that would otherwise
+    // render "0 days overdue" on a lead that is very much overdue.
+    expect(followUpLabel(inHours(-25), NOW).count).toBeGreaterThanOrEqual(1)
   })
 })

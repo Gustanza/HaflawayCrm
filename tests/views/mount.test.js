@@ -151,6 +151,7 @@ const VIEWS = [
   ['LeadList', () => import('../../src/views/leads/LeadListView.vue')],
   ['UrgencyBoard', () => import('../../src/views/leads/UrgencyBoardView.vue')],
   ['Pipeline', () => import('../../src/views/leads/PipelineView.vue')],
+  ['MonthlyBoard', () => import('../../src/views/leads/MonthlyBoardView.vue')],
   ['LeadDetail', () => import('../../src/views/leads/LeadDetailView.vue')],
   ['LeadQuickAdd', () => import('../../src/views/leads/LeadQuickAddView.vue')],
   ['Dashboard', () => import('../../src/views/analytics/DashboardView.vue')],

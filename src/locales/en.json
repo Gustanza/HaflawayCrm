@@ -77,6 +77,7 @@
     "leads": "Leads",
     "newLead": "New lead",
     "lead": "Lead",
+    "months": "Months",
     "pipeline": "Pipeline",
     "urgency": "Upcoming events",
     "campaigns": "Campaigns",
@@ -243,6 +244,7 @@
     "searchLabel": "Search leads",
     "searchPlaceholder": "Search by name or number…",
     "all": "All",
+    "revealClosed": "{count} closed hidden — show",
     "showClosed": "Show closed",
     "noMatches": "No leads matched",
     "noMatchesBody": "Try a different name, or clear the filters.",
@@ -257,7 +259,100 @@
     "stage": "Stage",
     "dealValue": "Deal value",
     "phone": "Phone",
-    "actions": "Actions"
+    "actions": "Actions",
+    "nextAction": "Next action",
+    "sortByNextAction": "Sort by next action, soonest first",
+    "filterStage": "Stage",
+    "filterFollowUp": "Follow-up",
+    "filterEvent": "Event",
+    "sortByEvent": "Sort by event date, soonest first",
+    "dueOverdue": "Overdue",
+    "dueToday": "Due today",
+    "dueUpcoming": "Due this week",
+    "dueNone": "No reminder"
+  },
+  "nextAction": {
+    "overdueNow": "Overdue",
+    "overdueHours": "{count}h overdue",
+    "overdueDays": "{count} days overdue",
+    "dueMinutes": "in {count} min",
+    "dueHours": "in {count}h",
+    "tomorrow": "Tomorrow {time}",
+    "dueDays": "in {count} days"
+  },
+  "deleteLead": {
+    "dangerZone": "Danger zone",
+    "dangerHelp": "Deleting removes this lead and its whole history. It cannot be undone.",
+    "action": "Delete lead",
+    "title": "Delete this lead permanently",
+    "subtitle": "{name} and everything recorded against them.",
+    "willRemove": "This will remove",
+    "theLead": "The lead record itself",
+    "phoneLock": "The phone number claim, freeing it to be added again",
+    "irreversible": "There is no undo, and no copy kept.",
+    "cacWarning": "This lead is won. Its campaign keeps its spend but loses a conversion, so that campaign's cost per customer will change.",
+    "count": {
+      "activities": "{count} timeline entries (calls, notes, outcomes)",
+      "contacts": "{count} saved contacts",
+      "quotes": "{count} quotes"
+    },
+    "reason": "Why are you deleting this?",
+    "reasonPlaceholder": "e.g. duplicate of an existing lead",
+    "reasonHelp": "Kept in the deletion record. No customer details are kept.",
+    "typeName": "Type {name} to confirm",
+    "confirm": "Delete permanently",
+    "deleting": "Deleting…",
+    "done": "Lead deleted",
+    "offline": "You are offline. A delete cannot be queued — reconnect and try again.",
+    "step": {
+      "activities": "Removing the timeline…",
+      "contacts": "Removing contacts…",
+      "quotes": "Removing quotes…",
+      "phoneIndex": "Releasing the phone number…",
+      "lead": "Removing the lead…"
+    }
+  },
+  "stageMove": {
+    "missing": "Add the {fields} before moving to {stage}.",
+    "zeroValue": "A won deal needs a value above zero.",
+    "reopenForbidden": "This lead is closed. Ask a manager to reopen it.",
+    "fillItIn": "Opening the lead so you can add it."
+  },
+  "fieldName": {
+    "dealValueMinor": "deal value",
+    "lossReason": "loss reason",
+    "parkReason": "reason for parking",
+    "eventDate": "event date",
+    "qualification_budgetBand": "budget",
+    "qualification_decisionMakerContactId": "decision maker"
+  },
+  "lastContact": {
+    "heading": "Last contact",
+    "attempts": "· {count} tries, no answer"
+  },
+  "months": {
+    "groupBy": "Group by",
+    "mode": {
+      "event": "Event month",
+      "created": "Month captured"
+    },
+    "subtitle": {
+      "event": "{count} leads with events in this window",
+      "created": "{count} leads captured in this window"
+    },
+    "month": "Month",
+    "total": "Total",
+    "current": "now",
+    "today": "Today",
+    "earlier": "Earlier months",
+    "later": "Later months",
+    "showLost": "Include lost",
+    "noDate": "No event date",
+    "noDateHelp": "These belong to no month until a date is set.",
+    "needsIndex": "This screen needs a database index that has not been created yet.",
+    "needsIndexHelp": "An administrator must deploy the Firestore indexes. Retrying will not help until then.",
+    "none": "Nothing in this window",
+    "noneBody": "Try a different range, or switch what the months are grouped by."
   },
   "detail": {
     "notFound": "Lead not found.",
@@ -277,6 +372,11 @@
     "decisionMakerPlaceholder": "Who decides?",
     "timeline": "Timeline",
     "noActivity": "Nothing logged yet.",
+    "correct": "Correct this",
+    "correctPrompt": "This entry stays on the record, struck through. What was wrong with it?",
+    "correctPlaceholder": "e.g. logged against the wrong lead",
+    "correctConfirm": "Retract entry",
+    "corrected": "Entry retracted",
     "voided": "Voided: {reason}"
   },
   "activityType": {

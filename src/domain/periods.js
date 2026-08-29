@@ -141,6 +141,43 @@ export function monthBounds(key) {
   return { start, end }
 }
 
+/**
+ * N month keys starting at `from`, going FORWARD, oldest first.
+ *
+ * The mirror of recentMonthKeys(). Trend charts look backwards at what happened; an events
+ * business plans forwards at what is booked — "what does December look like" is a question
+ * about work that has not happened yet, and no backwards window can answer it.
+ */
+export function upcomingMonthKeys(count, from = new Date()) {
+  const d = inOrgTime(from)
+  if (!d || !Number.isInteger(count) || count <= 0) return []
+  const out = []
+  for (let i = 0; i < count; i++) {
+    const m = d.getMonth() + i
+    const year = d.getFullYear() + Math.floor(m / 12)
+    const month = ((m % 12) + 12) % 12
+    out.push(`${year}-${pad(month + 1)}`)
+  }
+  return out
+}
+
+/**
+ * Inclusive-start / exclusive-end bounds spanning a whole list of month keys.
+ *
+ * What makes a month grid queryable with ONE range read instead of one query per month:
+ * `eventDate >= start && eventDate < end` over the first and last month in the window,
+ * grouped by month afterwards. Returns null for an empty or unparseable list rather than
+ * a bogus range — a wrong range silently returns the wrong leads.
+ */
+export function monthSpanBounds(keys) {
+  if (!Array.isArray(keys) || keys.length === 0) return null
+  const sorted = [...keys].sort()
+  const first = monthBounds(sorted[0])
+  const last = monthBounds(sorted[sorted.length - 1])
+  if (!first || !last) return null
+  return { start: first.start, end: last.end }
+}
+
 /** The N most recent month keys, oldest first — for trend charts. */
 export function recentMonthKeys(count, from = new Date()) {
   const d = inOrgTime(from)

@@ -104,6 +104,10 @@ export const useAuthStore = defineStore('auth', () => {
     viewAllLeads: ['admin', 'finance', 'viewer'].includes(role.value),
     viewTeamLeads: isManager.value,
     viewAuditLog: isAdmin.value,
+    // Admin ONLY, never manager. This is the one irreversible action in the product: it
+    // destroys the timeline, releases the phone lock, and moves historical CAC. A manager
+    // reassigns and closes leads; they do not get to erase one.
+    deleteLead: isAdmin.value,
   }))
 
   /* ---------------------------------------------------------------- actions */

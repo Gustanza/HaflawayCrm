@@ -10,25 +10,27 @@
  * produces a sentence the agent can act on rather than an opaque permission error from the
  * rules (§5.2).
  */
-import { computed, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { computed, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { collection, doc, orderBy, query, limit } from 'firebase/firestore'
+import { collection, doc, getCountFromServer, orderBy, query, limit } from 'firebase/firestore'
 import { getDb } from '@/firebase/app.js'
 import { useAuthStore } from '@/stores/auth.js'
 import { useUiStore } from '@/stores/ui.js'
 import { useCollection, useDoc } from '@/composables/useCollection.js'
-import { changeStage } from '@/services/leads.service.js'
+import { changeStage, voidActivity, LEAD_SUBCOLLECTIONS } from '@/services/leads.service.js'
 import { nextStages, validateTransition, LOSS_REASONS, PARK_REASONS } from '@/domain/stages.js'
-import { BUDGET_BANDS } from '@/domain/taxonomies.js'
+import { BUDGET_BANDS, outcomeMessageKey } from '@/domain/taxonomies.js'
 import { formatPhone, toTelLink, toWhatsAppLink } from '@/domain/phone.js'
 import { formatMoney, toMinor } from '@/domain/money.js'
 import { toDate } from '@/domain/periods.js'
 import { priorityScore } from '@/domain/scoring.js'
 import { useNow } from '@/composables/useNow.js'
+import { useStageMessage } from '@/composables/useStageMessage.js'
 import StageBadge from '@/components/leads/StageBadge.vue'
 import EventCountdown from '@/components/leads/EventCountdown.vue'
 import LogActivityDialog from '@/components/leads/LogActivityDialog.vue'
+import DeleteLeadDialog from '@/components/leads/DeleteLeadDialog.vue'
 import LoadingRows from '@/components/ui/LoadingRows.vue'
 
 const props = defineProps({ id: { type: String, required: true } })
@@ -36,10 +38,15 @@ const props = defineProps({ id: { type: String, required: true } })
 const auth = useAuthStore()
 const ui = useUiStore()
 const router = useRouter()
+// Optional: this view is mounted without a router context in the render-smoke suite, and a
+// detail page that throws when it cannot see a URL is a worse component than one that
+// simply has no incoming stage to honour.
+const route = useRoute()
 // Ticks on its own — see useNow.js. Keeps the printed Priority figure honest if this page
 // is left open across a day boundary.
 const now = useNow()
 const { t, locale } = useI18n()
+const { messageFor } = useStageMessage()
 
 const { item: lead, loading, loaded } = useDoc(async () => doc(await getDb(), 'leads', props.id))
 
@@ -137,7 +144,9 @@ const extras = computed(() => {
 
 const check = computed(() =>
   pendingStage.value && lead.value
-    ? validateTransition({ ...lead.value, ...extras.value }, pendingStage.value)
+    ? validateTransition({ ...lead.value, ...extras.value }, pendingStage.value, {
+        role: auth.role,
+      })
     : { ok: false, message: '' },
 )
 
@@ -150,6 +159,91 @@ function openStage(stage) {
   decisionMaker.value = lead.value?.qualification?.decisionMakerContactId ?? ''
 }
 
+/**
+ * Arriving from the pipeline board with a move that needs data first.
+ *
+ * Dragging a card onto Won when the lead has no deal value cannot succeed there — a kanban
+ * column has nowhere to type a number — so the board sends the user here with `?stage=won`
+ * and this opens the form already pointed at that stage. Without it the redirect would
+ * dump them on a lead detail page with no indication of why they had been moved.
+ *
+ * Waits for the lead to load: `openStage()` seeds its fields from the document, so running
+ * it against a null lead would blank the very values it is meant to prefill. `once` because
+ * this is a hand-off, not a binding — the user must be free to close the sheet.
+ */
+watch(
+  [lead, () => route?.query?.stage],
+  ([loadedLead, wanted]) => {
+    if (!loadedLead || !wanted || pendingStage.value) return
+    if (!available.value.includes(wanted)) return
+    stageOpen.value = true
+    openStage(wanted)
+  },
+  { immediate: true },
+)
+
+/* ------------------------------------------------- correcting the timeline */
+
+/**
+ * WHY THIS RETRACTS RATHER THAN EDITS.
+ *
+ * The ask was to edit a timeline entry, and that is the one thing this record must not
+ * allow. P1 makes the timeline the primary record and P4 makes it immutable, because it is
+ * what settles a commission dispute months later — "who promised the customer what, and
+ * when". An editable note means anyone can rewrite what a customer said after the fact, and
+ * a record that can be quietly rewritten is not evidence of anything. firestore.rules holds
+ * the same line: the only fields an update may touch are the void fields, and un-voiding is
+ * refused outright.
+ *
+ * What the ask is really about is being stuck with a mistake, and that is fair — the fix
+ * for it was already built (`voidActivity`, the rules, and the struck-through rendering
+ * below) and simply had no button anywhere in the product. So: retract the wrong entry with
+ * a stated reason, then log the right one. Both stay visible, which is the honest account of
+ * what happened.
+ *
+ * Only entries a PERSON typed can be retracted. "Lead created", a stage change or a
+ * reassignment are records of something the system did; there is no mistake to own there,
+ * and letting them be struck through would just put holes in the audit trail.
+ */
+const VOIDABLE_TYPES = ['call', 'whatsapp', 'sms', 'visit', 'note']
+
+const voidingId = ref(null)
+const voidReason = ref('')
+const voidSaving = ref(false)
+
+const canCorrect = (activity) =>
+  !activity.isVoided && VOIDABLE_TYPES.includes(activity.type) && auth.can.createLead
+
+function startCorrection(id) {
+  voidingId.value = id
+  voidReason.value = ''
+}
+
+function cancelCorrection() {
+  voidingId.value = null
+  voidReason.value = ''
+}
+
+async function confirmCorrection(activityId) {
+  if (!voidReason.value.trim() || voidSaving.value) return
+  voidSaving.value = true
+  try {
+    await voidActivity({
+      leadId: props.id,
+      activityId,
+      user: { uid: auth.uid, displayName: auth.displayName },
+      reason: voidReason.value,
+    })
+    ui.success(t('detail.corrected'))
+    cancelCorrection()
+  } catch (error) {
+    // Left open on failure so the typed reason is not lost.
+    ui.error(error.message ?? t('errors.write.generic'))
+  } finally {
+    voidSaving.value = false
+  }
+}
+
 async function confirmStage() {
   if (!check.value.ok) return
   const target = pendingStage.value
@@ -157,7 +251,9 @@ async function confirmStage() {
     await changeStage({
       lead: lead.value,
       toStage: target,
-      user: { uid: auth.uid, displayName: auth.displayName },
+      // See the note in PipelineView: without the role, reopening a closed lead is
+      // refused by changeStage even for the admin the UI just cleared.
+      user: { uid: auth.uid, displayName: auth.displayName, role: auth.role },
       extra: extras.value,
     })
     ui.success(t('detail.stageChanged', { stage: t(`stage.${target}`) }))
@@ -194,6 +290,50 @@ const ACTIVITY_ICON = {
   assignment: 'M16 20v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 7a3 3 0 1 0 0 6 3 3 0 0 0 0-6z',
   payment: 'M2 7h20v10H2zM2 11h20',
 }
+/* ------------------------------------------------------------ delete a lead */
+
+/**
+ * Count what a delete would destroy, so the confirmation can name it instead of asking the
+ * admin to authorise an unknown quantity.
+ *
+ * `getCountFromServer` is an aggregation query: it returns a number without reading the
+ * documents, so counting a 400-entry timeline costs one read rather than 400. Worth the
+ * extra round trip precisely because this is the one dialog nobody should rush.
+ *
+ * A failed count is NOT a reason to block the delete — it degrades to nulls and the dialog
+ * simply says less. Refusing to delete because we could not count would be the wrong
+ * failure: the admin can see the timeline on the page behind the dialog.
+ */
+const showDelete = ref(false)
+const inventory = ref(null)
+
+async function openDelete() {
+  showDelete.value = true
+  inventory.value = null
+  try {
+    const db = await getDb()
+    const counts = await Promise.all(
+      LEAD_SUBCOLLECTIONS.map(async (name) => [
+        name,
+        (await getCountFromServer(collection(db, 'leads', props.id, name))).data().count,
+      ]),
+    )
+    inventory.value = Object.fromEntries(counts)
+  } catch {
+    inventory.value = null
+  }
+}
+
+/**
+ * The lead this page is built on no longer exists, so there is nothing to render and no
+ * "undo" to offer. Leave for the list rather than showing a not-found flash on a route
+ * whose id is now permanently dead.
+ */
+function onDeleted() {
+  showDelete.value = false
+  router.replace({ name: 'leads' })
+}
+
 </script>
 
 <template>
@@ -352,8 +492,8 @@ const ACTIVITY_ICON = {
             />
           </div>
 
-          <p v-if="!check.ok && check.message" class="field-error" role="alert">
-            {{ check.message }}
+          <p v-if="!check.ok" class="field-error" role="alert">
+            {{ messageFor(check, pendingStage) }}
           </p>
 
           <button type="button" class="btn-primary w-full" :disabled="!check.ok" @click="confirmStage">
@@ -395,11 +535,7 @@ const ACTIVITY_ICON = {
             <div class="min-w-0 flex-1">
               <div class="flex items-baseline justify-between gap-2">
                 <span class="text-sm font-medium text-slate-900">
-                  {{ a.outcome ? $t(`activity.outcome.${a.outcome === 'no_answer' ? 'noAnswer'
-                     : a.outcome === 'switched_off' ? 'switchedOff'
-                     : a.outcome === 'wrong_number' ? 'wrongNumber'
-                     : a.outcome === 'callback_requested' ? 'callbackRequested'
-                     : a.outcome}`) : $t(`activityType.${a.type}`) }}
+                  {{ a.outcome ? $t(outcomeMessageKey(a.outcome)) : $t(`activityType.${a.type}`) }}
                 </span>
                 <span class="text-xs text-slate-400 shrink-0 tabular-nums">{{ when(a.at) }}</span>
               </div>
@@ -408,6 +544,51 @@ const ACTIVITY_ICON = {
               <p v-if="a.isVoided" class="mt-1 text-xs text-rose-600">
                 {{ $t('detail.voided', { reason: a.voidReason }) }}
               </p>
+
+              <!-- Quiet until wanted: a correction is rare, and an always-loud "Correct
+                   this" on every entry would read as an invitation to revise the record. -->
+              <button
+                v-if="canCorrect(a) && voidingId !== a.id"
+                type="button"
+                class="mt-1 text-xs font-medium text-slate-500 underline underline-offset-2
+                       hover:text-rose-700"
+                @click="startCorrection(a.id)"
+              >
+                {{ $t('detail.correct') }}
+              </button>
+
+              <!-- Inline rather than a modal: the entry being corrected must stay in view,
+                   or the user is confirming against a memory of which one they clicked. -->
+              <div v-if="voidingId === a.id" class="mt-2 rounded-lg bg-slate-50 p-2.5 ring-1 ring-slate-200">
+                <p class="text-xs text-slate-600">{{ $t('detail.correctPrompt') }}</p>
+                <input
+                  v-model="voidReason"
+                  type="text"
+                  class="field-input mt-1.5 text-sm"
+                  :placeholder="$t('detail.correctPlaceholder')"
+                  :disabled="voidSaving"
+                  @keydown.enter="confirmCorrection(a.id)"
+                />
+                <div class="mt-2 flex gap-2">
+                  <button
+                    type="button"
+                    class="btn-secondary flex-1 text-sm"
+                    :disabled="voidSaving"
+                    @click="cancelCorrection"
+                  >
+                    {{ $t('common.cancel') }}
+                  </button>
+                  <button
+                    type="button"
+                    class="flex-1 rounded-lg bg-rose-600 px-3 py-2 text-sm font-semibold text-white
+                           hover:bg-rose-700 disabled:opacity-40"
+                    :disabled="!voidReason.trim() || voidSaving"
+                    @click="confirmCorrection(a.id)"
+                  >
+                    {{ $t('detail.correctConfirm') }}
+                  </button>
+                </div>
+              </div>
             </div>
           </li>
         </ol>
@@ -431,7 +612,35 @@ const ACTIVITY_ICON = {
         </div>
       </section>
 
+      <!-- Danger zone. Admin only, last on the page, visually quarantined: it is not part
+           of the daily flow and must not sit anywhere a thumb lands by accident. -->
+      <section v-if="auth.can.deleteLead" class="mt-8 border-t border-slate-200 pt-4">
+        <h2 class="text-xs font-semibold uppercase tracking-wide text-slate-500">
+          {{ $t('deleteLead.dangerZone') }}
+        </h2>
+        <div class="mt-2 flex flex-wrap items-center justify-between gap-3">
+          <p class="text-xs text-slate-500">{{ $t('deleteLead.dangerHelp') }}</p>
+          <button
+            type="button"
+            class="rounded-lg px-3 py-2 text-sm font-medium text-rose-700 ring-1 ring-inset
+                   ring-rose-300 hover:bg-rose-50"
+            style="min-height: 2.75rem"
+            @click="openDelete"
+          >
+            {{ $t('deleteLead.action') }}
+          </button>
+        </div>
+      </section>
+
       <LogActivityDialog v-if="showLog" :lead="lead" @close="showLog = false" />
+
+      <DeleteLeadDialog
+        v-if="showDelete"
+        :lead="lead"
+        :inventory="inventory"
+        @close="showDelete = false"
+        @deleted="onDeleted"
+      />
     </template>
   </div>
 </template>

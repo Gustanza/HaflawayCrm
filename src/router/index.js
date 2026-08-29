@@ -87,6 +87,12 @@ const routes = [
     },
   },
   {
+    path: '/months',
+    name: 'months',
+    component: () => import('@/views/leads/MonthlyBoardView.vue'),
+    meta: { requiresAuth: true, titleKey: 'nav.months' },
+  },
+  {
     path: '/urgency',
     name: 'urgency',
     component: () => import('@/views/leads/UrgencyBoardView.vue'),
