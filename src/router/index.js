@@ -45,6 +45,12 @@ const routes = [
     meta: { requiresAuth: true, titleKey: 'nav.workQueue' },
   },
   {
+    path: '/leads',
+    name: 'leads',
+    component: () => import('@/views/LeadsListView.vue'),
+    meta: { requiresAuth: true, titleKey: 'nav.leads' },
+  },
+  {
     path: '/leads/new',
     name: 'lead-new',
     component: () => import('@/views/QuickAddLeadView.vue'),
