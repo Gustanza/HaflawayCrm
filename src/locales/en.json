@@ -77,19 +77,16 @@
     "leads": "Leads",
     "newLead": "New lead",
     "lead": "Lead",
-    "months": "Months",
-    "pipeline": "Pipeline",
-    "urgency": "Upcoming events",
-    "campaigns": "Campaigns",
-    "expenses": "Expenses",
-    "analytics": "Analytics",
+    "dashboard": "Dashboard",
     "users": "Users",
     "settings": "Settings",
     "menu": "Menu",
     "short": {
       "workQueue": "Queue",
       "leads": "Leads",
-      "urgency": "Events",
+      "dashboard": "Stats",
+      "users": "Users",
+      "settings": "Settings",
       "newLead": "New"
     },
     "more": "More"

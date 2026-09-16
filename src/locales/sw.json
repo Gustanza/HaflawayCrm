@@ -77,19 +77,16 @@
     "leads": "Wateja tarajiwa",
     "newLead": "Mteja mpya",
     "lead": "Mteja tarajiwa",
-    "months": "Miezi",
-    "pipeline": "Hatua za mauzo",
-    "urgency": "Matukio ya karibu",
-    "campaigns": "Matangazo",
-    "expenses": "Matumizi",
-    "analytics": "Takwimu",
+    "dashboard": "Takwimu",
     "users": "Watumiaji",
     "settings": "Mipangilio",
     "menu": "Menyu",
     "short": {
       "workQueue": "Kazi",
       "leads": "Wateja",
-      "urgency": "Matukio",
+      "dashboard": "Takwimu",
+      "users": "Watumiaji",
+      "settings": "Mipangilio",
       "newLead": "Mpya"
     },
     "more": "Zaidi"

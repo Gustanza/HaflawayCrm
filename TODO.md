@@ -291,12 +291,24 @@ Extends the existing `firestore.rules` (identity/org helpers, `users`, `usersPub
 
 ## Phase 3 — App shell
 
-- [ ] Rebuild `src/components/layout/AppLayout.vue` and `AuthLayout.vue` (nav: Work Queue,
-      Leads, Dashboard, Settings, Admin/Users for admins).
-- [ ] Rebuild `src/components/ui/ToastHost.vue`, `OfflineBanner.vue`, `LocaleToggle.vue`.
-- [ ] Restore `App.vue` to use the layouts again (currently a bare `RouterView`).
-- [ ] Wire `src/router/index.js` routes back for every screen in §5, with the same
-      `requiresAuth`/`roles`/`allowUnprovisioned` guard pattern already in the router file.
+- [x] Rebuilt `src/components/layout/AppLayout.vue` (responsive: sticky sidebar ≥640px,
+      fixed bottom tab bar on mobile — nav: Work Queue, Leads, Dashboard, Users for admins,
+      Settings) and `AuthLayout.vue` (centred card).
+- [x] Rebuilt `src/components/ui/ToastHost.vue`, `OfflineBanner.vue`, `LocaleToggle.vue` — all
+      thin wrappers around the UNCHANGED `stores/ui.js`/`i18n.js`, so no new state design was
+      needed here.
+- [x] Restored `App.vue` to use the layouts again.
+- [x] Pruned/refreshed the `nav.*` locale keys (dropped campaigns/expenses/analytics/
+      pipeline/urgency/months, added dashboard) in both `en.json` and `sw.json` — just this
+      one namespace, so the shell itself has correct labels. The rest of §5's Phase 5 (i18n)
+      is still open.
+- [ ] Router wiring deliberately LEFT to Phase 4: a route pointing at a view file that
+      doesn't exist yet fails `vite build` outright (dynamic import specifiers are resolved
+      statically), so each route is added in the same step as the view file it points to,
+      not ahead of it. `src/router/index.js` still has `const routes = []`.
+- Build (`npx vite build`) and full unit suite (164 tests) verified green with the shell
+  wired but zero routes — confirms App.vue/layouts don't themselves break anything before a
+  single screen exists.
 
 ## Phase 4 — Screens
 
