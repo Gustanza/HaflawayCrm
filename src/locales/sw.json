@@ -377,7 +377,8 @@
     "noUpcomingEvents": "Hakuna tukio ndani ya siku 30 zijazo",
     "hotLeads": "Wanaoahidi zaidi",
     "noHotLeads": "Hakuna mteja aliyewekwa moto",
-    "totalWon": "Jumla {count}"
+    "totalWon": "Jumla {count}",
+    "needsIndex": "Ukurasa huu unahitaji \"index\" ya database ambayo bado haijatengenezwa. Msimamizi anatakiwa kupeleka Firestore indexes — kujaribu tena hakutasaidia mpaka hapo."
   },
   "leadDetail": {
     "event": "Tukio",

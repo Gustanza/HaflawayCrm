@@ -45,6 +45,16 @@ function leadName(lead) {
       {{ t('common.loading') }}
     </div>
 
+    <div v-else-if="dashboard.error" class="mt-8 text-center">
+      <p class="text-sm text-rose-700">{{ t('errors.loadFailed') }}</p>
+      <p v-if="dashboard.error.code === 'failed-precondition'" class="mt-1 text-xs text-slate-500">
+        {{ t('dashboard.needsIndex') }}
+      </p>
+      <button type="button" class="btn-secondary mt-3 text-sm" @click="dashboard.load()">
+        {{ t('common.retry') }}
+      </button>
+    </div>
+
     <template v-else>
       <div class="mt-5 grid grid-cols-2 gap-3">
         <div class="card p-4">

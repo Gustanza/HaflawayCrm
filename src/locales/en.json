@@ -377,7 +377,8 @@
     "noUpcomingEvents": "No events in the next 30 days",
     "hotLeads": "Most promising",
     "noHotLeads": "No leads marked hot",
-    "totalWon": "{count} total"
+    "totalWon": "{count} total",
+    "needsIndex": "This screen needs a database index that has not been created yet. An administrator must deploy the Firestore indexes — retrying will not help until then."
   },
   "leadDetail": {
     "event": "Event",
