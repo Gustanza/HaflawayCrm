@@ -13,8 +13,44 @@ import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '@/stores/auth.js'
 import i18n from '@/i18n.js'
 
-// All views were wiped for a rebuild. Routes go back here as views come back.
-const routes = []
+const routes = [
+  {
+    path: '/login',
+    name: 'login',
+    component: () => import('@/views/auth/LoginView.vue'),
+    meta: { public: true, titleKey: 'auth.signIn' },
+  },
+  {
+    path: '/register',
+    name: 'register',
+    component: () => import('@/views/auth/RegisterView.vue'),
+    meta: { public: true, titleKey: 'auth.register.title' },
+  },
+  {
+    path: '/forgot-password',
+    name: 'forgot-password',
+    component: () => import('@/views/auth/ForgotPasswordView.vue'),
+    meta: { public: true, titleKey: 'auth.forgotPasswordTitle' },
+  },
+  {
+    path: '/no-access',
+    name: 'no-access',
+    component: () => import('@/views/auth/NoAccessView.vue'),
+    meta: { requiresAuth: true, allowUnprovisioned: true, titleKey: 'auth.noAccess.title' },
+  },
+  {
+    path: '/forbidden',
+    name: 'forbidden',
+    component: () => import('@/views/ForbiddenView.vue'),
+    meta: { requiresAuth: true, allowUnprovisioned: true, titleKey: 'errors.forbidden' },
+  },
+  {
+    path: '/:pathMatch(.*)*',
+    name: 'not-found',
+    component: () => import('@/views/NotFoundView.vue'),
+    meta: { public: true, titleKey: 'errors.notFound' },
+  },
+]
 
 export const router = createRouter({
   history: createWebHistory(),
