@@ -394,14 +394,42 @@ Extends the existing `firestore.rules` (identity/org helpers, `users`, `usersPub
 - [x] Rules test suite green end-to-end (`npm run test:rules`): still 93/93 after Phase 4/5 —
       re-verified twice (once right after Phase 4/5 landed, once again in this pass).
 - [x] `npm run build` passes the bundle-size gate: 112.3 KB / 250 KB budget, 137.7 KB headroom.
-- [ ] Manual pass (create a lead, add two deals, log activities with mandatory follow-ups,
-      close won/lost, verify dashboard counts, verify offline sync): **not done** — needs a
-      real signed-in session against the Auth emulator, which this sandbox could not do (see
-      the Phase 1/2 notes on the Auth emulator binary not being downloadable here; retried
-      again in this pass, same result — see below). **This is the one item that genuinely
-      needs the owner's own machine**: `npm run dev:emulators`, then `npm run seed`, then
-      `npm run dev`, sign in as `agent1@haflaway.com` / `haflaway123` (or any seeded account —
-      the seed script prints the full list), and walk through the pass above.
+- [x] **The Auth emulator blocker from Phase 1/2 is resolved** — it was intermittent, not a
+      hard sandbox limitation: a later retry in this pass got both Firestore and Auth
+      emulators running together. That unblocked real end-to-end verification:
+  - [x] `node scripts/seed.js --leads=60` run for real against live emulators — completes
+        clean, creates all 9 users + 2 teams + 60 leads with deals/activities/phone-index
+        entries. The seed script (Phase 2) is now proven, not just syntax-checked.
+  - [x] `tests/integration/auth.integration.test.js` — **11/11 passing** against the real
+        seeded data: real password sign-in, real custom claims, the `canUseApp` gate computed
+        from real claims, `users/{uid}` read under the real rules, a deactivated account
+        correctly refused. This is the test Phase 1/2 flagged as unverified; it's verified now.
+  - [ ] `tests/integration/admin-invite.integration.test.js` and
+        `registration.integration.test.js` — **7 tests fail**, but for a reason unrelated to
+        this rebuild: both depend on `functions/index.js`'s `onCreate` trigger
+        (`syncClaimsOnUserCreate`) actually firing to sync custom claims, which needs the
+        Cloud Functions emulator. Starting it (`firebase emulators:start --only
+        firestore,auth,functions`) hits `firebase-debug.log`: *"Failed to load function
+        definition from source: … Cannot determine backend specification. Timeout after
+        10000."* — a known Functions-emulator failure mode when the function source can't
+        reach the network path it expects at load time (this sandbox's `node scripts/seed.js`
+        run separately logged a GCP metadata-server lookup failure, consistent with a
+        network-restricted sandbox). **This is pre-existing infrastructure this rebuild never
+        touched** (only a one-line `VALID_ROLES` edit for consistency, below) — not a defect
+        in Phases 0-6. Worth re-running on a machine with normal network access before
+        trusting the self-registration/admin-invite flow, but it does not block anything this
+        plan built.
+  - [x] Fixed a small piece of leftover staleness found while chasing this:
+        `functions/index.js`, `scripts/syncClaims.js` and `scripts/bootstrap-admin.js` all
+        still had `VALID_ROLES` including the dropped `finance`/`viewer` — harmless (nothing
+        in the UI could ever request them post-Phase-0), but inconsistent. Trimmed to
+        `['admin','manager','agent']` in all three.
+- [ ] Manual click-through pass (create a lead, add two deals, log activities with mandatory
+      follow-ups, close won/lost, verify dashboard counts, verify offline sync): still not
+      done — this needs a human clicking through a running browser, which is outside what
+      this session can do even with the emulators working. `npm run dev:emulators`, then
+      `npm run seed`, then `npm run dev`, sign in as `agent1@haflaway.com` / `haflaway123`
+      (or any seeded account — the seed script prints the full list).
 
 ---
 

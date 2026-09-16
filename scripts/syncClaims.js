@@ -33,7 +33,7 @@ const args = Object.fromEntries(
   }),
 )
 
-const VALID_ROLES = ['admin', 'manager', 'finance', 'agent', 'viewer']
+const VALID_ROLES = ['admin', 'manager', 'agent']
 
 /**
  * `orgId` must not contain an underscore.

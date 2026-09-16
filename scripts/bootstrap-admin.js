@@ -49,7 +49,7 @@ const args = Object.fromEntries(
   }),
 )
 
-const VALID_ROLES = ['admin', 'manager', 'finance', 'agent', 'viewer']
+const VALID_ROLES = ['admin', 'manager', 'agent']
 
 /** Must match scripts/syncClaims.js — orgId is the prefix of the leadPhoneIndex key. */
 const ORG_ID_PATTERN = /^[a-z0-9-]{2,40}$/

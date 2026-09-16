@@ -25,7 +25,7 @@ import { logger } from 'firebase-functions/v2'
 
 initializeApp()
 
-const VALID_ROLES = ['admin', 'manager', 'finance', 'agent', 'viewer']
+const VALID_ROLES = ['admin', 'manager', 'agent']
 
 /**
  * Must be kept in sync with ORG_ID_PATTERN in src/domain/org.js, firestore.rules and
