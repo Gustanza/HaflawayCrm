@@ -302,10 +302,13 @@ Extends the existing `firestore.rules` (identity/org helpers, `users`, `usersPub
       pipeline/urgency/months, added dashboard) in both `en.json` and `sw.json` — just this
       one namespace, so the shell itself has correct labels. The rest of §5's Phase 5 (i18n)
       is still open.
-- [ ] Router wiring deliberately LEFT to Phase 4: a route pointing at a view file that
-      doesn't exist yet fails `vite build` outright (dynamic import specifiers are resolved
-      statically), so each route is added in the same step as the view file it points to,
-      not ahead of it. `src/router/index.js` still has `const routes = []`.
+- [x] Router wiring — deliberately left for Phase 4 at the time this was written (see the
+      reasoning below, still accurate); completed there. `src/router/index.js` now has all 14
+      routes; confirmed done reading Phase 4's own notes and the file itself.
+      *(Original note, kept for the reasoning: a route pointing at a view file that doesn't
+      exist yet fails `vite build` outright — dynamic import specifiers are resolved
+      statically — so each route had to be added in the same step as the view file it
+      points to, not ahead of it.)*
 - Build (`npx vite build`) and full unit suite (164 tests) verified green with the shell
   wired but zero routes — confirms App.vue/layouts don't themselves break anything before a
   single screen exists.
@@ -375,13 +378,30 @@ Extends the existing `firestore.rules` (identity/org helpers, `users`, `usersPub
 
 ## Phase 6 — Tests & hardening
 
-- [ ] `tests/views/mount.test.js`-equivalent: mount every rebuilt view with/without data.
-- [ ] Rules test suite green end-to-end (`npm run test:rules`).
-- [ ] `npm run build` passes the bundle-size gate.
-- [ ] Manual pass: create a lead, add two different product deals, log activities with mandatory
-      follow-ups, close one deal won with a reason skipped (should be blocked), close one lost
-      with a reason, verify the dashboard counts update, verify offline (airplane mode) queues
-      writes and syncs on reconnect.
+- [x] `tests/views/mount.test.js`: mounts all 14 views (17 cases — a couple get a second role
+      variant) against a shared Firestore/Auth mock (`tests/views/setupFirebaseMock.js`) and a
+      real signed-in Pinia auth store, asserting no render-time `console.error` and non-empty
+      output. **Scope, stated honestly**: this is the "empty state" pass only — the mock's
+      `onSnapshot`/`getDocs` return an empty snapshot regardless of which query was built, so
+      it does not exercise how a screen renders WITH rows (LeadDetailView's lead+deals+
+      timeline are three separate live subscriptions in one mount; routing distinct canned
+      data to each would need a query-aware mock, which is real additional engineering this
+      pass didn't do). **Mutation-verified**: deliberately broke WorkQueueView's template
+      (`items.thisFieldDoesNotExist.length`), confirmed the suite fails with the exact
+      TypeError, then reverted and confirmed green again — so this is proven to catch a real
+      render-time throw, not just passing trivially.
+      `npm run test:views` runs it; `npm run test:all` already wired it in (pre-existing script).
+- [x] Rules test suite green end-to-end (`npm run test:rules`): still 93/93 after Phase 4/5 —
+      re-verified twice (once right after Phase 4/5 landed, once again in this pass).
+- [x] `npm run build` passes the bundle-size gate: 112.3 KB / 250 KB budget, 137.7 KB headroom.
+- [ ] Manual pass (create a lead, add two deals, log activities with mandatory follow-ups,
+      close won/lost, verify dashboard counts, verify offline sync): **not done** — needs a
+      real signed-in session against the Auth emulator, which this sandbox could not do (see
+      the Phase 1/2 notes on the Auth emulator binary not being downloadable here; retried
+      again in this pass, same result — see below). **This is the one item that genuinely
+      needs the owner's own machine**: `npm run dev:emulators`, then `npm run seed`, then
+      `npm run dev`, sign in as `agent1@haflaway.com` / `haflaway123` (or any seeded account —
+      the seed script prints the full list), and walk through the pass above.
 
 ---
 
