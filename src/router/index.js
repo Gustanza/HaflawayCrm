@@ -69,6 +69,24 @@ const routes = [
     meta: { requiresAuth: true, roles: ['admin', 'manager'], titleKey: 'nav.dashboard' },
   },
   {
+    path: '/settings',
+    name: 'settings',
+    component: () => import('@/views/SettingsView.vue'),
+    meta: { requiresAuth: true, titleKey: 'nav.settings' },
+  },
+  {
+    path: '/admin/users',
+    name: 'admin-users',
+    component: () => import('@/views/admin/UsersView.vue'),
+    meta: { requiresAuth: true, roles: ['admin'], titleKey: 'nav.users' },
+  },
+  {
+    path: '/setup',
+    name: 'setup',
+    component: () => import('@/views/SetupView.vue'),
+    meta: { requiresAuth: true, allowUnprovisioned: true, titleKey: 'setup.title' },
+  },
+  {
     path: '/forbidden',
     name: 'forbidden',
     component: () => import('@/views/ForbiddenView.vue'),
