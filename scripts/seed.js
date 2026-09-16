@@ -190,7 +190,7 @@ async function seedUsers() {
       role: u.role,
       teamId: u.teamId,
       isActive: u.isActive !== false,
-      locale: 'sw',
+      locale: 'en',
       createdAt: Timestamp.now(),
       createdBy: 'seed',
       updatedAt: Timestamp.now(),

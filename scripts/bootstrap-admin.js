@@ -198,7 +198,7 @@ async function main() {
       role,
       teamId,
       isActive: true,
-      locale: 'sw',
+      locale: 'en',
       createdAt: now,
       createdBy: 'bootstrap-admin',
       updatedAt: now,

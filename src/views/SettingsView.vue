@@ -41,10 +41,6 @@ async function saveProfile() {
   }
 }
 
-async function onSetLocale(locale) {
-  await auth.setLocale(locale)
-}
-
 const currentPassword = ref('')
 const newPassword = ref('')
 const confirmPassword = ref('')
@@ -95,36 +91,6 @@ async function changePassword() {
           {{ savingProfile ? t('common.loading') : t('common.save') }}
         </button>
       </form>
-    </section>
-
-    <!-- Language -->
-    <section class="card mt-4 p-4">
-      <h2 class="text-sm font-semibold uppercase tracking-wide text-slate-500">{{ t('common.language') }}</h2>
-      <p class="mt-1 text-sm text-slate-600">{{ t('settings.languageHelp') }}</p>
-      <div class="mt-3 flex gap-2">
-        <button
-          type="button"
-          class="rounded-full px-3.5 py-2 text-sm font-medium ring-1 ring-inset transition-colors"
-          style="min-height: var(--spacing-touch)"
-          :class="(auth.locale ?? 'sw') === 'sw'
-            ? 'bg-brand-600 text-white ring-brand-600'
-            : 'bg-white text-slate-700 ring-slate-300 hover:bg-slate-50'"
-          @click="onSetLocale('sw')"
-        >
-          {{ t('common.swahili') }}
-        </button>
-        <button
-          type="button"
-          class="rounded-full px-3.5 py-2 text-sm font-medium ring-1 ring-inset transition-colors"
-          style="min-height: var(--spacing-touch)"
-          :class="auth.locale === 'en'
-            ? 'bg-brand-600 text-white ring-brand-600'
-            : 'bg-white text-slate-700 ring-slate-300 hover:bg-slate-50'"
-          @click="onSetLocale('en')"
-        >
-          {{ t('common.english') }}
-        </button>
-      </div>
     </section>
 
     <!-- Password -->

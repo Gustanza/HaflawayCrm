@@ -1,8 +1,7 @@
 <script setup>
-import { computed, onMounted, onUnmounted, watch } from 'vue'
+import { computed, onMounted, onUnmounted } from 'vue'
 import { useAuthStore } from '@/stores/auth.js'
 import { useUiStore } from '@/stores/ui.js'
-import { setLocale } from '@/i18n.js'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import AuthLayout from '@/components/layout/AuthLayout.vue'
 import ToastHost from '@/components/ui/ToastHost.vue'
@@ -20,21 +19,6 @@ onMounted(() => {
 })
 
 onUnmounted(() => unbindConnectivity())
-
-// Follow the locale stored on the user's profile, so an agent who prefers Swahili gets
-// Swahili on every device they sign in from.
-//
-// Only when there IS one. Before sign-in — and for a profile that has never set one —
-// i18n keeps whatever the user chose on the login screen, which it loaded from
-// localStorage. Watching an unconditional 'sw' fallback here overwrote that choice on
-// every boot and made the language toggle useless.
-watch(
-  () => auth.locale,
-  (locale) => {
-    if (locale) setLocale(locale)
-  },
-  { immediate: true },
-)
 </script>
 
 <template>

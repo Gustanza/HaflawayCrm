@@ -2,7 +2,6 @@
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth.js'
-import LocaleToggle from '@/components/ui/LocaleToggle.vue'
 import OfflineBanner from '@/components/ui/OfflineBanner.vue'
 
 const auth = useAuthStore()
@@ -53,8 +52,7 @@ async function onSignOut() {
       </nav>
       <div class="border-t border-slate-200 p-3">
         <p class="truncate px-1 text-sm font-medium text-slate-700">{{ auth.displayName }}</p>
-        <div class="mt-2 flex items-center justify-between">
-          <LocaleToggle />
+        <div class="mt-2 flex items-center justify-end">
           <button type="button" class="btn-ghost text-sm" @click="onSignOut">
             {{ $t('auth.signOut') }}
           </button>
@@ -69,7 +67,6 @@ async function onSignOut() {
       <header class="flex items-center justify-between border-b border-slate-200 bg-white px-4 py-3 sm:hidden">
         <span class="text-base font-semibold text-brand-700">{{ $t('app.name') }}</span>
         <div class="flex items-center gap-1">
-          <LocaleToggle />
           <button type="button" class="btn-ghost text-sm" @click="onSignOut">
             {{ $t('auth.signOut') }}
           </button>

@@ -1,50 +1,26 @@
 /**
- * Localisation. Swahili is the default (TODO.md §13): sales staff work in Swahili,
- * and the dashboard audience is bilingual. `en` is the fallback so a missing key
- * degrades to English rather than rendering the raw key path to a user.
+ * Localisation. English only, at the owner's request — the app was originally built
+ * Swahili-first with an English fallback (TODO.md §8); `src/locales/sw.json` is kept in the
+ * repo, untouched and unreferenced, so Swahili can be reinstated later without redoing the
+ * translation work. See git history for how the locale switcher was wired if it comes back.
  */
 import { createI18n } from 'vue-i18n'
-import sw from '@/locales/sw.json'
 import en from '@/locales/en.json'
 
-export const SUPPORTED_LOCALES = ['sw', 'en']
-
-const STORAGE_KEY = 'haflaway.locale'
-
-/** A choice made before sign-in has nowhere else to live — there is no profile yet. */
-function storedLocale() {
-  try {
-    const value = localStorage.getItem(STORAGE_KEY)
-    return SUPPORTED_LOCALES.includes(value) ? value : null
-  } catch {
-    return null // private mode, or storage disabled
-  }
-}
+export const SUPPORTED_LOCALES = ['en']
 
 export const i18n = createI18n({
   legacy: false,
-  locale: storedLocale() ?? 'sw',
+  locale: 'en',
   fallbackLocale: 'en',
-  messages: { sw, en },
+  messages: { en },
   // Missing keys are a bug, not a runtime warning to live with.
   missingWarn: import.meta.env.DEV,
   fallbackWarn: import.meta.env.DEV,
 })
 
-export function setLocale(locale) {
-  if (!SUPPORTED_LOCALES.includes(locale)) return
-  i18n.global.locale.value = locale
-  document.documentElement.setAttribute('lang', locale)
-  try {
-    localStorage.setItem(STORAGE_KEY, locale)
-  } catch {
-    /* not fatal — the choice simply will not survive this session */
-  }
-}
-
-// Apply immediately, so <html lang> is right on the first paint rather than after mount.
 if (typeof document !== 'undefined') {
-  document.documentElement.setAttribute('lang', i18n.global.locale.value)
+  document.documentElement.setAttribute('lang', 'en')
 }
 
 export default i18n

@@ -435,9 +435,15 @@ Extends the existing `firestore.rules` (identity/org helpers, `users`, `usersPub
 
 ## 8. Localisation
 
-Swahili-first UI (field staff), English available. Reuse `Africa/Dar_es_Salaam` timezone handling
-from `periods.js`. Event vocabulary: *Harusi*, *Send-off*, *Kitchen party*, *Mahafali*,
-*Kumbukumbu*, *Corporate*, *Other* (unchanged from the legacy plan — still accurate).
+**English only, at the owner's request** (superseded the original Swahili-first design below).
+`src/i18n.js` loads only `en.json`; `sw.json` is kept in the repo, untouched and unreferenced, so
+Swahili can be reinstated later without redoing translation work — see git history for how the
+locale switcher (`LocaleToggle.vue`, the Settings language section, `auth.locale`/`setLocale`) was
+wired, all of which was removed along with the switch to English-only.
+
+Still true regardless of locale count: reuse `Africa/Dar_es_Salaam` timezone handling from
+`periods.js`. Event vocabulary: *Harusi*, *Send-off*, *Kitchen party*, *Mahafali*, *Kumbukumbu*,
+*Corporate*, *Other*.
 
 ## 9. Open questions
 

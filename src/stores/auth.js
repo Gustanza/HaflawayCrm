@@ -77,15 +77,6 @@ export const useAuthStore = defineStore('auth', () => {
   const displayName = computed(
     () => profile.value?.displayName || user.value?.email?.split('@')[0] || '',
   )
-  /**
-   * Null until the profile document arrives — deliberately.
-   *
-   * Returning a hard 'sw' fallback here meant App.vue's immediate watcher wrote 'sw' into
-   * localStorage on every single boot, before the user could touch anything, destroying an
-   * EN choice made on the login screen. The caller decides the fallback; this getter only
-   * reports what the profile actually says.
-   */
-  const locale = computed(() => profile.value?.locale ?? null)
 
   const isAdmin = computed(() => role.value === 'admin')
   const isManager = computed(() => role.value === 'admin' || role.value === 'manager')
@@ -307,19 +298,6 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  async function setLocale(next) {
-    if (!uid.value) return
-    const [db, { doc, updateDoc, serverTimestamp }] = await Promise.all([
-      getDb(),
-      import('firebase/firestore'),
-    ])
-    await updateDoc(doc(db, 'users', uid.value), {
-      locale: next,
-      updatedAt: serverTimestamp(),
-      updatedBy: uid.value,
-    })
-  }
-
   function clearError() {
     errorKey.value = null
   }
@@ -327,8 +305,8 @@ export const useAuthStore = defineStore('auth', () => {
   return {
     user, claims, profile, initialising, busy, errorKey,
     isSignedIn, uid, role, teamId, orgId, isProvisioned, isActive, canUseApp,
-    displayName, locale, isAdmin, isManager, isAgent, can,
+    displayName, isAdmin, isManager, isAgent, can,
     init, signIn, registerAccount, signOut, resetPassword, changePassword, refreshClaims,
-    setLocale, clearError,
+    clearError,
   }
 })
