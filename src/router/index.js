@@ -39,6 +39,18 @@ const routes = [
     meta: { requiresAuth: true, allowUnprovisioned: true, titleKey: 'auth.noAccess.title' },
   },
   {
+    path: '/',
+    name: 'work-queue',
+    component: () => import('@/views/WorkQueueView.vue'),
+    meta: { requiresAuth: true, titleKey: 'nav.workQueue' },
+  },
+  {
+    path: '/leads/new',
+    name: 'lead-new',
+    component: () => import('@/views/QuickAddLeadView.vue'),
+    meta: { requiresAuth: true, titleKey: 'nav.newLead' },
+  },
+  {
     path: '/forbidden',
     name: 'forbidden',
     component: () => import('@/views/ForbiddenView.vue'),

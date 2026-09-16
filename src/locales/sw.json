@@ -274,7 +274,6 @@
     "overdueDays": "Imechelewa siku {count}",
     "dueMinutes": "Baada ya dakika {count}",
     "dueHours": "Baada ya saa {count}",
-    "tomorrow": "Kesho {time}",
     "dueDays": "Baada ya siku {count}"
   },
   "deleteLead": {

@@ -274,7 +274,6 @@
     "overdueDays": "{count} days overdue",
     "dueMinutes": "in {count} min",
     "dueHours": "in {count}h",
-    "tomorrow": "Tomorrow {time}",
     "dueDays": "in {count} days"
   },
   "deleteLead": {
