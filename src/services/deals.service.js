@@ -6,7 +6,7 @@
  * closes independently.
  */
 
-import { collection, doc, getDocs, query, serverTimestamp, setDoc, updateDoc, where } from 'firebase/firestore'
+import { collection, deleteDoc, doc, getDocs, query, serverTimestamp, setDoc, updateDoc, where } from 'firebase/firestore'
 import { getDb } from '@/firebase/app.js'
 import { periodKeys } from '@/domain/periods.js'
 
@@ -85,6 +85,16 @@ export async function closeDeal({ leadId, dealId, status, lostReason = null, use
     updatedAt: serverTimestamp(),
     updatedBy: user.uid,
   })
+}
+
+/**
+ * Remove a deal outright — for the "wrong product tapped by accident" case, not for a real
+ * deal that just didn't work out (that's `closeDeal(..., 'closed_lost')`, which keeps the
+ * record). Admin only — firestore.rules enforces it (same gate as deleteLead).
+ */
+export async function deleteDeal({ leadId, dealId }) {
+  const db = await getDb()
+  await deleteDoc(doc(db, 'leads', leadId, 'deals', dealId))
 }
 
 /** Reopen a closed deal. Manager/admin only — firestore.rules enforces it. */

@@ -1,6 +1,6 @@
 <script setup>
 import { ref, computed } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth.js'
 import { useLeadsStore } from '@/stores/leads.js'
@@ -13,9 +13,11 @@ import LogActivityDialog from '@/components/leads/LogActivityDialog.vue'
 import SnoozeDialog from '@/components/leads/SnoozeDialog.vue'
 import CloseLostDialog from '@/components/leads/CloseLostDialog.vue'
 import ReassignDialog from '@/components/leads/ReassignDialog.vue'
+import DeleteLeadDialog from '@/components/leads/DeleteLeadDialog.vue'
 import Modal from '@/components/ui/Modal.vue'
 
 const route = useRoute()
+const router = useRouter()
 const { t } = useI18n()
 const auth = useAuthStore()
 const leadsStore = useLeadsStore()
@@ -51,7 +53,7 @@ function formatDateTime(value) {
   return d ? d.toLocaleString() : ''
 }
 
-/** { type: 'log' | 'snooze' | 'closeLost' | 'reassign' | 'addProduct', dealId? } | null */
+/** { type: 'log' | 'snooze' | 'closeLost' | 'reassign' | 'addProduct' | 'delete', dealId? } | null */
 const activeDialog = ref(null)
 const closeDialog = () => { activeDialog.value = null }
 
@@ -81,6 +83,22 @@ async function reopenDeal(deal) {
   } catch (error) {
     ui.error(t(writeErrorKey(error)))
   }
+}
+
+async function removeDeal(deal) {
+  const product = t(`productType.${deal.productType}`)
+  if (!window.confirm(t('leadDetail.confirmRemoveDeal', { product }))) return
+  try {
+    await leadsStore.deleteDeal(leadId.value, deal.id)
+    ui.success(t('leadDetail.dealRemoved', { product }))
+  } catch (error) {
+    ui.error(t(writeErrorKey(error)))
+  }
+}
+
+function onLeadDeleted() {
+  activeDialog.value = null
+  router.push({ name: 'leads' })
 }
 
 async function addProduct(productType) {
@@ -244,6 +262,14 @@ async function confirmVoid(activity) {
               >
                 {{ t('leadDetail.reopen') }}
               </button>
+              <button
+                v-if="auth.can.deleteLead"
+                type="button"
+                class="btn-ghost text-sm text-rose-600"
+                @click="removeDeal(deal)"
+              >
+                {{ t('leadDetail.removeDeal') }}
+              </button>
             </div>
           </li>
         </ul>
@@ -308,6 +334,23 @@ async function confirmVoid(activity) {
         </button>
       </section>
 
+      <!-- Danger zone -->
+      <section v-if="auth.can.deleteLead" class="mt-6">
+        <h2 class="text-sm font-semibold uppercase tracking-wide text-rose-600">
+          {{ t('deleteLead.dangerZone') }}
+        </h2>
+        <div class="card mt-2 p-4">
+          <p class="text-sm text-slate-600">{{ t('deleteLead.dangerHelp') }}</p>
+          <button
+            type="button"
+            class="btn-danger mt-3 text-sm"
+            @click="activeDialog = { type: 'delete' }"
+          >
+            {{ t('deleteLead.action') }}
+          </button>
+        </div>
+      </section>
+
       <LogActivityDialog
         v-if="activeDialog?.type === 'log'"
         :lead-id="leadId"
@@ -333,6 +376,14 @@ async function confirmVoid(activity) {
         :lead="lead"
         @close="closeDialog"
         @saved="closeDialog"
+      />
+      <DeleteLeadDialog
+        v-if="activeDialog?.type === 'delete'"
+        :lead="lead"
+        :deal-count="deals.length"
+        :activity-count="activities.length"
+        @close="closeDialog"
+        @deleted="onLeadDeleted"
       />
       <Modal v-if="activeDialog?.type === 'addProduct'" title-key="leadDetail.addProductTitle" @close="closeDialog">
         <p v-if="!availableProducts.length" class="text-sm text-slate-600">

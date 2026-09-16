@@ -407,6 +407,9 @@
     "closedWon": "{product} marked won",
     "closedLost": "{product} marked lost",
     "confirmCloseWon": "Mark {product} as won?",
+    "removeDeal": "Remove",
+    "confirmRemoveDeal": "Remove {product} from this lead? This is for one added by mistake — if it just didn't work out, use Mark lost instead.",
+    "dealRemoved": "{product} removed",
     "logActivity": "Log a contact",
     "snoozeAction": "Snooze"
   },

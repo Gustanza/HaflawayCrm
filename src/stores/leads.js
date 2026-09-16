@@ -87,6 +87,10 @@ export const useLeadsStore = defineStore('leads', () => {
     return dealsService.reopenDeal({ leadId, dealId, user: actingUser(auth) })
   }
 
+  async function deleteDeal(leadId, dealId) {
+    return dealsService.deleteDeal({ leadId, dealId })
+  }
+
   async function logActivity({ leadId, channel, outcome, summary, dealId, nextFollowUpAt }) {
     return activitiesService.logActivity({
       leadId, channel, outcome, summary, dealId, nextFollowUpAt, user: actingUser(auth),
@@ -108,7 +112,7 @@ export const useLeadsStore = defineStore('leads', () => {
   return {
     workQueue, leadList, lead, deals, timeline,
     createLead, updateLead, reassignLead, deleteLead,
-    addDeal, closeDeal, reopenDeal,
+    addDeal, closeDeal, reopenDeal, deleteDeal,
     logActivity, voidActivity, setNextFollowUp,
     checkPhoneAvailable,
   }

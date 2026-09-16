@@ -407,6 +407,9 @@
     "closedWon": "{product} imefanikiwa",
     "closedLost": "{product} imepotea",
     "confirmCloseWon": "Weka {product} kama imefanikiwa?",
+    "removeDeal": "Ondoa",
+    "confirmRemoveDeal": "Ondoa {product} kutoka kwa mteja huyu? Hii ni kwa iliyoongezwa kwa makosa — kama haikufanikiwa tu, tumia Weka imepotea badala yake.",
+    "dealRemoved": "{product} imeondolewa",
     "logActivity": "Andika mawasiliano",
     "snoozeAction": "Ahirisha"
   },
