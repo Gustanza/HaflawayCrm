@@ -55,8 +55,15 @@ watch(
          put two elements at viewport top fighting over z-index. -->
     <OfflineBanner v-if="!auth.canUseApp" />
     <component :is="layout">
-      <RouterView v-slot="{ Component }">
-        <component :is="Component" />
+      <RouterView v-slot="{ Component, route }">
+        <!-- Keyed on the full path, not just the route name: several views (Lead Detail
+             chief among them) read their id from route params INSIDE setup() and hand it,
+             already unwrapped, to composables like leadsStore.lead()/deals()/timeline().
+             Vue Router reuses a component instance across a param-only navigation on the
+             same route record, so without this key a "open existing lead" jump from one
+             lead straight to another would leave every listener still pointed at the old
+             document — the whole screen would silently keep showing someone else's lead. -->
+        <component :is="Component" :key="route.fullPath" />
       </RouterView>
     </component>
     <ToastHost />

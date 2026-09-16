@@ -51,6 +51,12 @@ const routes = [
     meta: { requiresAuth: true, titleKey: 'nav.newLead' },
   },
   {
+    path: '/leads/:id',
+    name: 'lead-detail',
+    component: () => import('@/views/LeadDetailView.vue'),
+    meta: { requiresAuth: true, titleKey: 'nav.lead' },
+  },
+  {
     path: '/forbidden',
     name: 'forbidden',
     component: () => import('@/views/ForbiddenView.vue'),
