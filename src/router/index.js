@@ -63,6 +63,12 @@ const routes = [
     meta: { requiresAuth: true, titleKey: 'nav.lead' },
   },
   {
+    path: '/dashboard',
+    name: 'dashboard',
+    component: () => import('@/views/DashboardView.vue'),
+    meta: { requiresAuth: true, roles: ['admin', 'manager'], titleKey: 'nav.dashboard' },
+  },
+  {
     path: '/forbidden',
     name: 'forbidden',
     component: () => import('@/views/ForbiddenView.vue'),
