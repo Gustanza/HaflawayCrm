@@ -40,6 +40,8 @@
     "backToSignIn": "Back to sign in",
     "signingIn": "Signing in…",
     "welcome": "Welcome back",
+    "noAccountYet": "Don't have an account?",
+    "haveAccountAlready": "Already have an account?",
     "error": {
       "invalidEmail": "That email address is not valid.",
       "invalidCredentials": "Email or password is incorrect.",
@@ -57,7 +59,8 @@
       "checkAgain": "Check again",
       "deactivated": "Your account has been suspended. Contact your administrator.",
       "stillWaiting": "Still no access. Your administrator needs to grant it.",
-      "lastChecked": "Last checked at {time}"
+      "lastChecked": "Last checked at {time}",
+      "setupLink": "Setting up a brand-new organisation? Go to Setup."
     },
     "showPassword": "Show password",
     "hidePassword": "Hide password",
@@ -67,9 +70,12 @@
       "subtitle": "Register your company and get started.",
       "companyName": "Company name",
       "companyNamePlaceholder": "e.g. Acme Events",
+      "displayName": "Your name",
+      "displayNamePlaceholder": "e.g. Amina Juma",
       "action": "Create account",
       "done": "Your organisation is ready",
-      "orgStepFailed": "Your account was created, but setting up your organisation failed. Try again below."
+      "orgStepFailed": "Your account was created, but setting up your organisation failed. Try again below.",
+      "retryOrg": "Set up my organisation"
     }
   },
   "nav": {
@@ -91,26 +97,6 @@
     },
     "more": "More"
   },
-  "stage": {
-    "new": "New",
-    "contacted": "Contacted",
-    "unreachable": "Unreachable",
-    "qualified": "Qualified",
-    "quoted": "Quoted",
-    "negotiation": "Negotiation",
-    "won": "Won",
-    "lost": "Lost",
-    "parked": "Parked",
-    "nurture": "Nurture",
-    "disqualified": "Disqualified"
-  },
-  "budgetBand": {
-    "unknown": "Not yet known",
-    "<50k": "Under 50,000",
-    "50-150k": "50,000–150,000",
-    "150-500k": "150,000–500,000",
-    "500k+": "Over 500,000"
-  },
   "eventType": {
     "harusi": "Wedding",
     "send_off": "Send-off",
@@ -118,6 +104,25 @@
     "mahafali": "Graduation",
     "kumbukumbu": "Memorial",
     "corporate": "Corporate",
+    "other": "Other"
+  },
+  "productType": {
+    "committee_invite": "Committee invite cards",
+    "contribution_reminder": "Contribution reminders",
+    "contribution_card": "Contribution cards",
+    "invitation_card": "Invitation cards",
+    "other": "Other"
+  },
+  "dealStatus": {
+    "open": "Open",
+    "closed_won": "Won",
+    "closed_lost": "Lost"
+  },
+  "channel": {
+    "call": "Call",
+    "whatsapp": "WhatsApp",
+    "sms": "SMS",
+    "in_person": "In person",
     "other": "Other"
   },
   "lead": {
@@ -164,10 +169,6 @@
     },
     "loadFailed": "Could not load. Check your connection and try again."
   },
-  "phase": {
-    "comingSoon": "This screen is being built",
-    "plannedIn": "Planned in {phase}"
-  },
   "queue": {
     "subtitle": "{count} leads waiting",
     "overdue": "Overdue",
@@ -194,6 +195,10 @@
     "notePlaceholder": "What the customer said…",
     "save": "Save",
     "saved": "Saved",
+    "linkedDeal": "About which product (optional)",
+    "linkedDealNone": "General — not about one product",
+    "nextFollowUpRequired": "Set the next follow-up, or close a deal in the same update.",
+    "closingSkipsFollowUp": "Closing a deal now, so a follow-up is not required.",
     "outcome": {
       "spoke": "We spoke",
       "noAnswer": "No answer",
@@ -207,7 +212,6 @@
     "twoHours": "2 hours",
     "tomorrow": "Tomorrow 9am",
     "threeDays": "3 days",
-    "afterCommittee": "After committee",
     "oneWeek": "1 week",
     "custom": "Pick a time",
     "customLabel": "Remind me at"
@@ -216,7 +220,7 @@
     "whatsapp": "WhatsApp",
     "instagram": "Instagram",
     "facebook": "Facebook",
-    "field": "Field visit",
+    "committee_visit": "Committee visit",
     "referral": "Referral",
     "walk_in": "Walk-in",
     "other": "Other"
@@ -225,9 +229,11 @@
     "subtitle": "A phone number is enough. Everything else can come later.",
     "name": "Name",
     "namePlaceholder": "e.g. Neema & Baraka",
+    "phonePlaceholder": "e.g. 0712 345 678",
     "eventType": "Event type",
     "eventDateHint": "If you do not know yet, leave it — you can add it later.",
     "source": "Where did they come from?",
+    "hot": "Mark as a hot lead",
     "save": "Save lead",
     "saved": "Lead added",
     "checking": "Checking whether this number is already here…",
@@ -235,18 +241,14 @@
     "duplicate": "That number is already in the system.",
     "duplicateTitle": "This number is already here",
     "duplicateBody": "A lead with this number already exists. Do not add them twice — open the existing one.",
-    "openExisting": "Open the existing lead",
-    "campaign": "Campaign",
-    "noCampaign": "No campaign",
-    "campaignHint": "Set once, at capture. It cannot be changed later."
+    "openExisting": "Open the existing lead"
   },
   "leads": {
     "showing": "Showing {shown} of {total}",
     "searchLabel": "Search leads",
     "searchPlaceholder": "Search by name or number…",
     "all": "All",
-    "revealClosed": "{count} closed hidden — show",
-    "showClosed": "Show closed",
+    "allSources": "All sources",
     "noMatches": "No leads matched",
     "noMatchesBody": "Try a different name, or clear the filters.",
     "clearFilters": "Clear filters",
@@ -256,20 +258,14 @@
     "allOwners": "Everyone",
     "loadMore": "Load more",
     "name": "Name",
-    "event": "Event",
-    "stage": "Stage",
-    "dealValue": "Deal value",
     "phone": "Phone",
     "actions": "Actions",
     "nextAction": "Next action",
     "sortByNextAction": "Sort by next action, soonest first",
-    "filterStage": "Stage",
     "filterFollowUp": "Follow-up",
-    "filterEvent": "Event",
-    "sortByEvent": "Sort by event date, soonest first",
     "dueOverdue": "Overdue",
     "dueToday": "Due today",
-    "dueUpcoming": "Due this week",
+    "dueUpcoming": "Upcoming",
     "dueNone": "No reminder"
   },
   "nextAction": {
@@ -291,15 +287,13 @@
     "theLead": "The lead record itself",
     "phoneLock": "The phone number claim, freeing it to be added again",
     "irreversible": "There is no undo, and no copy kept.",
-    "cacWarning": "This lead is won. Its campaign keeps its spend but loses a conversion, so that campaign's cost per customer will change.",
     "count": {
       "activities": "{count} timeline entries (calls, notes, outcomes)",
-      "contacts": "{count} saved contacts",
-      "quotes": "{count} quotes"
+      "deals": "{count} product deals"
     },
     "reason": "Why are you deleting this?",
     "reasonPlaceholder": "e.g. duplicate of an existing lead",
-    "reasonHelp": "Kept in the deletion record. No customer details are kept.",
+    "reasonHelp": "Not saved anywhere — there is no deletion record in this build.",
     "typeName": "Type {name} to confirm",
     "confirm": "Delete permanently",
     "deleting": "Deleting…",
@@ -307,90 +301,22 @@
     "offline": "You are offline. A delete cannot be queued — reconnect and try again.",
     "step": {
       "activities": "Removing the timeline…",
-      "contacts": "Removing contacts…",
-      "quotes": "Removing quotes…",
+      "deals": "Removing product deals…",
       "phoneIndex": "Releasing the phone number…",
       "lead": "Removing the lead…"
     }
   },
-  "stageMove": {
-    "missing": "Add the {fields} before moving to {stage}.",
-    "zeroValue": "A won deal needs a value above zero.",
-    "reopenForbidden": "This lead is closed. Ask a manager to reopen it.",
-    "fillItIn": "Opening the lead so you can add it."
-  },
-  "fieldName": {
-    "dealValueMinor": "deal value",
-    "lossReason": "loss reason",
-    "parkReason": "reason for parking",
-    "eventDate": "event date",
-    "qualification_budgetBand": "budget",
-    "qualification_decisionMakerContactId": "decision maker"
-  },
-  "lastContact": {
-    "heading": "Last contact",
-    "attempts": "· {count} tries, no answer"
-  },
-  "months": {
-    "groupBy": "Group by",
-    "mode": {
-      "event": "Event month",
-      "created": "Month captured"
-    },
-    "subtitle": {
-      "event": "{count} leads with events in this window",
-      "created": "{count} leads captured in this window"
-    },
-    "month": "Month",
-    "total": "Total",
-    "current": "now",
-    "today": "Today",
-    "earlier": "Earlier months",
-    "later": "Later months",
-    "showLost": "Include lost",
-    "noDate": "No event date",
-    "noDateHelp": "These belong to no month until a date is set.",
-    "needsIndex": "This screen needs a database index that has not been created yet.",
-    "needsIndexHelp": "An administrator must deploy the Firestore indexes. Retrying will not help until then.",
-    "none": "Nothing in this window",
-    "noneBody": "Try a different range, or switch what the months are grouped by."
-  },
   "detail": {
     "notFound": "Lead not found.",
-    "dealValue": "Deal value",
-    "guests": "Guests",
-    "nextAction": "Next action",
-    "priority": "Priority",
-    "changeStage": "Change stage",
-    "moveTo": "Move to",
-    "choose": "Choose…",
     "lossReason": "Why was it lost?",
-    "parkReason": "Why park it?",
-    "confirmMove": "Move to {stage}",
-    "stageChanged": "Moved to {stage}",
-    "budgetBand": "Budget",
-    "decisionMaker": "Decision maker",
-    "decisionMakerPlaceholder": "Who decides?",
     "timeline": "Timeline",
     "noActivity": "Nothing logged yet.",
-    "correct": "Correct this",
+    "correct": "Retract",
     "correctPrompt": "This entry stays on the record, struck through. What was wrong with it?",
     "correctPlaceholder": "e.g. logged against the wrong lead",
     "correctConfirm": "Retract entry",
     "corrected": "Entry retracted",
     "voided": "Voided: {reason}"
-  },
-  "activityType": {
-    "call": "Call",
-    "whatsapp": "WhatsApp",
-    "sms": "SMS",
-    "visit": "Visit",
-    "note": "Note",
-    "quote_sent": "Quote sent",
-    "stage_change": "Stage change",
-    "assignment": "Assigned",
-    "payment": "Payment",
-    "system": "System"
   },
   "lossReason": {
     "price": "Price",
@@ -402,35 +328,10 @@
     "wrong_fit": "Wrong fit",
     "other": "Other"
   },
-  "parkReason": {
-    "no_response_after_cadence": "No response after follow-ups",
-    "event_date_passed": "Event date passed",
-    "postponed": "Postponed",
-    "waiting_on_committee": "Waiting on the committee"
-  },
-  "urgency": {
-    "subtitle": "Closest events first.",
-    "critical": "This week",
-    "high": "Within 2 weeks",
-    "medium": "Within a month",
-    "low": "Further out",
-    "unknown": "No date set",
-    "passed": "Date passed",
-    "none": "No upcoming events",
-    "noneBody": "All your leads are closed or have no event date."
-  },
-  "pipeline": {
-    "subtitle": "Drag a card, or tap \"Move\".",
-    "move": "Move",
-    "emptyColumn": "Empty",
-    "cannotMove": "That move is not allowed."
-  },
   "role": {
     "admin": "Admin",
     "manager": "Manager",
-    "finance": "Finance",
-    "agent": "Agent",
-    "viewer": "Viewer"
+    "agent": "Agent"
   },
   "settings": {
     "profile": "Profile",
@@ -461,139 +362,53 @@
     "claimsBody": "Changing a role here does not grant access until an administrator runs this command on the server.",
     "claimsPending": "Permissions have not changed yet — run \"npm run claims\"."
   },
-  "campaigns": {
-    "subtitle": "Is this advertising paying for itself?",
-    "campaign": "Campaign",
-    "spend": "Spend",
-    "totalSpend": "Total spend",
-    "revenue": "Revenue",
-    "leads": "Leads",
-    "cpl": "Cost/lead",
-    "won": "Won",
-    "cac": "CAC",
-    "roas": "ROAS",
-    "none": "No campaigns",
-    "noneBody": "Add a campaign to start tracking spend.",
-    "attributionNote": "Leads are attributed on FIRST TOUCH.",
-    "noLeads": "no leads at all",
-    "teamScopeNote": "You see spend for all campaigns, but only your own team of leads against it.",
-    "add": "Add campaign",
-    "added": "Campaign added",
-    "name": "Name",
-    "channel": "Channel",
-    "budget": "Budget",
-    "addSpend": "Record spend",
-    "addSpendHint": "Every entry is permanent. To correct one, post another.",
-    "spentOn": "Date",
-    "spendAdded": "Spend recorded"
+  "dashboard": {
+    "period": {
+      "day": "Today",
+      "week": "This week",
+      "month": "This month",
+      "quarter": "This quarter"
+    },
+    "leadsCreated": "Leads captured",
+    "contactsMade": "Contacts made",
+    "closedWon": "Closed won",
+    "closedWonByProduct": "Won, by product",
+    "lostByReason": "Lost, why",
+    "upcomingEvents": "Upcoming events",
+    "noUpcomingEvents": "No events in the next 30 days",
+    "hotLeads": "Most promising",
+    "noHotLeads": "No leads marked hot",
+    "totalWon": "{count} total"
   },
-  "expenses": {
-    "subtitle": "The expense ledger",
-    "add": "Add",
-    "amount": "Amount",
-    "category": "Category",
-    "allocation": "Allocated to",
-    "allocationHelp": "This is what makes CAC per staff member or per campaign computable.",
-    "staffId": "Staff ID",
-    "description": "Description",
-    "saved": "Expense added",
-    "invalidAmount": "That amount is not valid.",
-    "none": "No expenses yet",
-    "noneBody": "Add expenses so CAC can be measured.",
-    "appendOnlyTitle": "Entries cannot be edited or deleted",
-    "appendOnlyBody": "Every entry stays as written. To correct one, add a new entry with a negative amount.",
-    "grandTotal": "Total {amount}"
-  },
-  "expenseCategory": {
-    "ad_spend": "Ad spend",
-    "salary": "Salary",
-    "commission": "Commission",
-    "airtime": "Airtime",
-    "data": "Data",
-    "transport": "Transport",
-    "tools": "Tools",
-    "rent": "Rent",
-    "other": "Other"
-  },
-  "allocation": {
-    "campaign": "Campaign",
-    "staff": "Staff",
-    "team": "Team",
-    "overhead": "Overhead"
-  },
-  "analytics": {
-    "subtitle": "Where the money went, and what it bought.",
-    "cac": "Customer acquisition cost (CAC)",
-    "leadsCreated": "Leads",
-    "won": "Won",
-    "lost": "Lost",
-    "revenue": "Revenue",
-    "investment": "Investment",
-    "winRate": "Win rate",
-    "cpl": "Cost/lead",
-    "salesCycle": "Sales cycle",
-    "days": "days",
-    "trend": "Trend",
-    "funnel": "Funnel",
-    "perStaff": "CAC per staff member",
-    "perStaffNote": "A figure from a handful of deals is noise, not a measurement. Check (n=).",
-    "staff": "Staff",
-    "perChannel": "By channel",
-    "lossReasons": "Why we lost",
-    "noData": "No data for this month",
-    "cohort": "By month created",
-    "period": "By month closed",
-    "cohortCaption": "Spend and outcomes attributed to the month the lead was CREATED. Answers: was that month of marketing money well spent?",
-    "periodCaption": "Outcomes counted in the month the deal CLOSED. Answers: how did we do this month? Mixes in spend from earlier months.",
-    "incompleteCohort": "This month is incomplete — many deals are still open, so these figures will rise.",
-    "noCostAccess": "Your role does not include cost visibility. Ask an admin, manager or finance colleague to view CAC and spend.",
-    "countShare": "Count · Share",
-    "policyNote": "Salaries: {salaries} · Commission: {commission} · Overhead: {overhead} · Attribution: {model}"
-  },
-  "funnel": {
-    "created": "Created",
-    "contacted": "Contacted",
-    "qualified": "Qualified",
-    "quoted": "Quoted",
-    "won": "Won"
-  },
-  "metrics": {
-    "noData": "Not enough data",
-    "lowConfidence": "Too few customers — this figure is not reliable",
-    "lowConfidenceNote": "Figures from fewer than {n} won customers are greyed: that is noise, not a measurement."
-  },
-  "overheadMethod": {
-    "by_revenue": "by revenue",
-    "by_leads": "by leads",
-    "equal": "split equally",
-    "none": "excluded"
-  },
-  "attributionModel": {
-    "first_touch": "first touch",
-    "last_touch": "last touch",
-    "linear": "linear"
-  },
-  "pagination": {
-    "label": "Pagination",
-    "showing": "Showing {from}-{to} of {total}",
-    "page": "Page {page}/{pageCount}",
-    "previous": "Previous",
-    "next": "Next",
-    "perPage": "Per page",
-    "perPageOption": "{n} per page",
-    "first": "First page",
-    "last": "Last page",
-    "goToPage": "Go to page {page}"
-  },
-  "list": {
-    "showMore": "Show {count} more",
-    "showAll": "Show all",
-    "showLess": "Show fewer",
-    "andMore": "and {count} more",
-    "loadOlder": "Load older",
-    "noMore": "Nothing older",
-    "topN": "Top {count}",
-    "collapsed": "{shown} of {total}"
+  "leadDetail": {
+    "event": "Event",
+    "noEvent": "No event set yet",
+    "source": "Source",
+    "owner": "Owner",
+    "reassign": "Reassign",
+    "reassignTitle": "Reassign this lead",
+    "reassignHint": "Pick who should own this lead now.",
+    "reassignSave": "Reassign",
+    "reassigned": "Lead reassigned to {name}",
+    "hot": "Hot lead",
+    "hotOn": "Marked as hot",
+    "hotOff": "Hot flag removed",
+    "deals": "Products",
+    "noDeals": "No products yet",
+    "noDealsBody": "Add the first product this lead is interested in.",
+    "addProduct": "Add a product",
+    "addProductTitle": "Add a product",
+    "addProductEmpty": "Every product already has an open deal.",
+    "productAdded": "{product} added",
+    "closeWon": "Mark won",
+    "closeLost": "Mark lost",
+    "reopen": "Reopen",
+    "reopened": "Deal reopened",
+    "closedWon": "{product} marked won",
+    "closedLost": "{product} marked lost",
+    "confirmCloseWon": "Mark {product} as won?",
+    "logActivity": "Log a contact",
+    "snoozeAction": "Snooze"
   },
   "setup": {
     "title": "Setup",

@@ -40,6 +40,8 @@
     "backToSignIn": "Rudi kuingia",
     "signingIn": "Inaingia…",
     "welcome": "Karibu tena",
+    "noAccountYet": "Huna akaunti?",
+    "haveAccountAlready": "Una akaunti tayari?",
     "error": {
       "invalidEmail": "Barua pepe si sahihi.",
       "invalidCredentials": "Barua pepe au nenosiri si sahihi.",
@@ -57,7 +59,8 @@
       "checkAgain": "Angalia tena",
       "deactivated": "Akaunti yako imesimamishwa. Wasiliana na msimamizi.",
       "stillWaiting": "Bado hujapewa nafasi. Msimamizi wako anatakiwa kukuruhusu.",
-      "lastChecked": "Iliangaliwa saa {time}"
+      "lastChecked": "Iliangaliwa saa {time}",
+      "setupLink": "Unaanzisha shirika jipya kabisa? Nenda kwenye Usanidi."
     },
     "showPassword": "Onyesha nenosiri",
     "hidePassword": "Ficha nenosiri",
@@ -67,9 +70,12 @@
       "subtitle": "Sajili kampuni yako uanze.",
       "companyName": "Jina la kampuni",
       "companyNamePlaceholder": "mfano: Acme Events",
+      "displayName": "Jina lako",
+      "displayNamePlaceholder": "mfano: Amina Juma",
       "action": "Fungua akaunti",
       "done": "Shirika lako liko tayari",
-      "orgStepFailed": "Akaunti yako imetengenezwa, lakini kuandaa shirika lako hakukufanikiwa. Jaribu tena hapa chini."
+      "orgStepFailed": "Akaunti yako imetengenezwa, lakini kuandaa shirika lako hakukufanikiwa. Jaribu tena hapa chini.",
+      "retryOrg": "Andaa shirika langu"
     }
   },
   "nav": {
@@ -91,26 +97,6 @@
     },
     "more": "Zaidi"
   },
-  "stage": {
-    "new": "Mpya",
-    "contacted": "Amewasiliana",
-    "unreachable": "Hapatikani",
-    "qualified": "Amethibitishwa",
-    "quoted": "Amepewa bei",
-    "negotiation": "Majadiliano",
-    "won": "Imefanikiwa",
-    "lost": "Imepotea",
-    "parked": "Imesimamishwa",
-    "nurture": "Bado mbali",
-    "disqualified": "Haifai"
-  },
-  "budgetBand": {
-    "unknown": "Bado haijulikani",
-    "<50k": "Chini ya 50,000",
-    "50-150k": "50,000–150,000",
-    "150-500k": "150,000–500,000",
-    "500k+": "Zaidi ya 500,000"
-  },
   "eventType": {
     "harusi": "Harusi",
     "send_off": "Send-off",
@@ -118,6 +104,25 @@
     "mahafali": "Mahafali",
     "kumbukumbu": "Kumbukumbu",
     "corporate": "Kampuni",
+    "other": "Nyingine"
+  },
+  "productType": {
+    "committee_invite": "Kadi za Mwaliko wa Kamati",
+    "contribution_reminder": "Reminder za Michango",
+    "contribution_card": "Kadi za Michango",
+    "invitation_card": "Kadi za Mwaliko",
+    "other": "Nyingine"
+  },
+  "dealStatus": {
+    "open": "Wazi",
+    "closed_won": "Imefanikiwa",
+    "closed_lost": "Imepotea"
+  },
+  "channel": {
+    "call": "Simu",
+    "whatsapp": "WhatsApp",
+    "sms": "SMS",
+    "in_person": "Ana kwa ana",
     "other": "Nyingine"
   },
   "lead": {
@@ -164,10 +169,6 @@
     },
     "loadFailed": "Imeshindikana kupakia. Angalia mtandao kisha ujaribu tena."
   },
-  "phase": {
-    "comingSoon": "Sehemu hii inajengwa",
-    "plannedIn": "Imepangwa katika {phase}"
-  },
   "queue": {
     "subtitle": "Wateja {count} wanaosubiri",
     "overdue": "Zimechelewa",
@@ -194,6 +195,10 @@
     "notePlaceholder": "Alichosema mteja…",
     "save": "Hifadhi",
     "saved": "Imehifadhiwa",
+    "linkedDeal": "Kuhusu bidhaa gani (si lazima)",
+    "linkedDealNone": "Jumla — si ya bidhaa maalum",
+    "nextFollowUpRequired": "Weka muda wa kufuatilia tena, au funga mpango kwenye hatua hii hii.",
+    "closingSkipsFollowUp": "Unafunga mpango sasa, hivyo muda wa kufuatilia hauhitajiki.",
     "outcome": {
       "spoke": "Tumeongea",
       "noAnswer": "Hapokei",
@@ -207,7 +212,6 @@
     "twoHours": "Saa 2",
     "tomorrow": "Kesho asubuhi",
     "threeDays": "Siku 3",
-    "afterCommittee": "Baada ya kikao",
     "oneWeek": "Wiki 1",
     "custom": "Chagua muda",
     "customLabel": "Nikumbushe saa"
@@ -216,7 +220,7 @@
     "whatsapp": "WhatsApp",
     "instagram": "Instagram",
     "facebook": "Facebook",
-    "field": "Kikao/Ziara",
+    "committee_visit": "Ziara ya kamati",
     "referral": "Amependekezwa",
     "walk_in": "Amefika",
     "other": "Nyingine"
@@ -225,9 +229,11 @@
     "subtitle": "Namba ya simu inatosha. Mengine yanaweza kuja baadaye.",
     "name": "Jina",
     "namePlaceholder": "mfano: Neema & Baraka",
+    "phonePlaceholder": "mfano: 0712 345 678",
     "eventType": "Aina ya tukio",
     "eventDateHint": "Kama hujui bado, iache — utaijaza baadaye.",
     "source": "Amekutoka wapi?",
+    "hot": "Weka kama mteja wa moto",
     "save": "Hifadhi mteja",
     "saved": "Mteja ameongezwa",
     "checking": "Inaangalia kama namba tayari ipo…",
@@ -235,18 +241,14 @@
     "duplicate": "Namba hii tayari ipo kwenye mfumo.",
     "duplicateTitle": "Namba hii tayari ipo",
     "duplicateBody": "Mteja mwenye namba hii tayari yupo. Usimuongeze mara mbili — fungua aliyepo.",
-    "openExisting": "Fungua aliyepo",
-    "campaign": "Kampeni",
-    "noCampaign": "Hakuna kampeni",
-    "campaignHint": "Imechaguliwa mara moja tu, wakati wa kusajili. Haiwezi kubadilishwa baadaye."
+    "openExisting": "Fungua aliyepo"
   },
   "leads": {
     "showing": "Inaonyesha {shown} kati ya {total}",
     "searchLabel": "Tafuta mteja",
     "searchPlaceholder": "Tafuta kwa jina au namba…",
     "all": "Wote",
-    "revealClosed": "{count} waliofungwa wamefichwa — onyesha",
-    "showClosed": "Onyesha waliofungwa",
+    "allSources": "Vyanzo vyote",
     "noMatches": "Hakuna aliyepatikana",
     "noMatchesBody": "Jaribu jina lingine au ondoa vichujio.",
     "clearFilters": "Ondoa vichujio",
@@ -256,20 +258,14 @@
     "allOwners": "Wote",
     "loadMore": "Onyesha zaidi",
     "name": "Jina",
-    "event": "Tukio",
-    "stage": "Hatua",
-    "dealValue": "Thamani",
     "phone": "Simu",
     "actions": "Vitendo",
     "nextAction": "Hatua ijayo",
     "sortByNextAction": "Panga kwa hatua ijayo, ya karibu kwanza",
-    "filterStage": "Hatua",
     "filterFollowUp": "Ufuatiliaji",
-    "filterEvent": "Tukio",
-    "sortByEvent": "Panga kwa tarehe ya tukio, la karibu kwanza",
     "dueOverdue": "Zimechelewa",
     "dueToday": "Za leo",
-    "dueUpcoming": "Za wiki hii",
+    "dueUpcoming": "Zinazokuja",
     "dueNone": "Hakuna kikumbusho"
   },
   "nextAction": {
@@ -291,15 +287,13 @@
     "theLead": "Taarifa za mteja mwenyewe",
     "phoneLock": "Namba ya simu itaachiwa huru ili iweze kusajiliwa tena",
     "irreversible": "Hakuna kurudisha, wala nakala inayobaki.",
-    "cacWarning": "Mteja huyu amefanikiwa. Kampeni yake itabaki na matumizi yake lakini itapoteza mauzo moja, hivyo gharama ya kupata mteja kwa kampeni hiyo itabadilika.",
     "count": {
       "activities": "Kumbukumbu {count} za mawasiliano (simu, maelezo, majibu)",
-      "contacts": "Anwani {count} zilizohifadhiwa",
-      "quotes": "Bei {count} zilizotolewa"
+      "deals": "Mipango {count} ya bidhaa"
     },
     "reason": "Kwa nini unafuta?",
     "reasonPlaceholder": "mfano: amejirudia mara mbili",
-    "reasonHelp": "Huhifadhiwa kwenye kumbukumbu ya ufutaji. Taarifa za mteja hazihifadhiwi.",
+    "reasonHelp": "Haihifadhiwi popote — hakuna kumbukumbu ya ufutaji kwenye toleo hili.",
     "typeName": "Andika {name} kuthibitisha",
     "confirm": "Futa kabisa",
     "deleting": "Inafuta…",
@@ -307,90 +301,22 @@
     "offline": "Huna mtandao. Ufutaji hauwezi kupangwa — rudi mtandaoni kisha ujaribu tena.",
     "step": {
       "activities": "Inaondoa kumbukumbu…",
-      "contacts": "Inaondoa anwani…",
-      "quotes": "Inaondoa bei…",
+      "deals": "Inaondoa mipango ya bidhaa…",
       "phoneIndex": "Inaachia namba ya simu…",
       "lead": "Inaondoa mteja…"
     }
   },
-  "stageMove": {
-    "missing": "Weka {fields} kabla ya kuhamishia {stage}.",
-    "zeroValue": "Mauzo yaliyofanikiwa yanahitaji thamani zaidi ya sifuri.",
-    "reopenForbidden": "Mteja huyu amefungwa. Muombe meneja aifungue tena.",
-    "fillItIn": "Tunafungua taarifa za mteja ili uweze kuiweka."
-  },
-  "fieldName": {
-    "dealValueMinor": "thamani ya mauzo",
-    "lossReason": "sababu ya kupoteza",
-    "parkReason": "sababu ya kusimamisha",
-    "eventDate": "tarehe ya tukio",
-    "qualification_budgetBand": "bajeti",
-    "qualification_decisionMakerContactId": "mwamuzi"
-  },
-  "lastContact": {
-    "heading": "Mawasiliano ya mwisho",
-    "attempts": "· majaribio {count}, hapokei"
-  },
-  "months": {
-    "groupBy": "Panga kwa",
-    "mode": {
-      "event": "Mwezi wa tukio",
-      "created": "Mwezi wa kusajili"
-    },
-    "subtitle": {
-      "event": "Wateja {count} wenye matukio katika kipindi hiki",
-      "created": "Wateja {count} waliosajiliwa katika kipindi hiki"
-    },
-    "month": "Mwezi",
-    "total": "Jumla",
-    "current": "sasa",
-    "today": "Leo",
-    "earlier": "Miezi iliyopita",
-    "later": "Miezi ijayo",
-    "showLost": "Jumuisha waliopotea",
-    "noDate": "Hakuna tarehe ya tukio",
-    "noDateHelp": "Hawa hawana mwezi hadi tarehe iwekwe.",
-    "needsIndex": "Ukurasa huu unahitaji index ya hifadhidata ambayo bado haijaundwa.",
-    "needsIndexHelp": "Msimamizi anatakiwa kusambaza Firestore indexes. Kujaribu tena hakutasaidia hadi hapo.",
-    "none": "Hakuna kitu katika kipindi hiki",
-    "noneBody": "Jaribu kipindi kingine, au badilisha msingi wa kupanga miezi."
-  },
   "detail": {
     "notFound": "Mteja hakupatikana.",
-    "dealValue": "Thamani",
-    "guests": "Wageni",
-    "nextAction": "Kufuatilia",
-    "priority": "Kipaumbele",
-    "changeStage": "Badilisha hatua",
-    "moveTo": "Hamishia",
-    "choose": "Chagua…",
     "lossReason": "Kwa nini imepotea?",
-    "parkReason": "Kwa nini imesimamishwa?",
-    "confirmMove": "Hamishia {stage}",
-    "stageChanged": "Imehamishiwa {stage}",
-    "budgetBand": "Bajeti",
-    "decisionMaker": "Muamuzi",
-    "decisionMakerPlaceholder": "Nani anaamua?",
     "timeline": "Historia",
     "noActivity": "Bado hakuna kilichoandikwa.",
-    "correct": "Rekebisha",
+    "correct": "Ondoa",
     "correctPrompt": "Kumbukumbu hii itabaki kwenye rekodi, ikiwa imepigwa mstari. Kulikuwa na tatizo gani?",
     "correctPlaceholder": "mfano: niliandika kwa mteja asiye sahihi",
     "correctConfirm": "Ondoa kumbukumbu",
     "corrected": "Kumbukumbu imeondolewa",
     "voided": "Imefutwa: {reason}"
-  },
-  "activityType": {
-    "call": "Simu",
-    "whatsapp": "WhatsApp",
-    "sms": "SMS",
-    "visit": "Ziara",
-    "note": "Maelezo",
-    "quote_sent": "Bei imetumwa",
-    "stage_change": "Hatua imebadilika",
-    "assignment": "Amekabidhiwa",
-    "payment": "Malipo",
-    "system": "Mfumo"
   },
   "lossReason": {
     "price": "Bei",
@@ -402,35 +328,10 @@
     "wrong_fit": "Haifai",
     "other": "Nyingine"
   },
-  "parkReason": {
-    "no_response_after_cadence": "Hajajibu baada ya kufuatilia",
-    "event_date_passed": "Tarehe imepita",
-    "postponed": "Limeahirishwa",
-    "waiting_on_committee": "Tunasubiri kamati"
-  },
-  "urgency": {
-    "subtitle": "Matukio yaliyo karibu zaidi kwanza.",
-    "critical": "Wiki hii",
-    "high": "Ndani ya wiki 2",
-    "medium": "Ndani ya mwezi",
-    "low": "Bado mbali",
-    "unknown": "Hakuna tarehe",
-    "passed": "Tarehe imepita",
-    "none": "Hakuna tukio linalokuja",
-    "noneBody": "Wateja wako wote wamefungwa au hawana tarehe."
-  },
-  "pipeline": {
-    "subtitle": "Buruta kadi au bonyeza \"Hamisha\".",
-    "move": "Hamisha",
-    "emptyColumn": "Hakuna",
-    "cannotMove": "Haiwezi kuhamishwa hapo."
-  },
   "role": {
     "admin": "Msimamizi",
     "manager": "Meneja",
-    "finance": "Fedha",
-    "agent": "Wakala",
-    "viewer": "Mtazamaji"
+    "agent": "Wakala"
   },
   "settings": {
     "profile": "Wasifu",
@@ -461,139 +362,53 @@
     "claimsBody": "Kubadilisha nafasi hapa hakubadilishi ruhusa hadi msimamizi aendeshe amri hii kwenye seva.",
     "claimsPending": "Ruhusa bado hazijabadilika — endesha \"npm run claims\"."
   },
-  "campaigns": {
-    "subtitle": "Je, matangazo yanalipa?",
-    "campaign": "Tangazo",
-    "spend": "Matumizi",
-    "totalSpend": "Jumla ya matumizi",
-    "revenue": "Mapato",
-    "leads": "Wateja",
-    "cpl": "Gharama/mteja",
-    "won": "Wamefanikiwa",
-    "cac": "CAC",
-    "roas": "ROAS",
-    "none": "Hakuna tangazo",
-    "noneBody": "Ongeza tangazo ili kufuatilia gharama.",
-    "attributionNote": "Wateja wanahesabiwa kwa mguso wa kwanza (first-touch).",
-    "noLeads": "hakuna mteja hata mmoja",
-    "add": "Ongeza tangazo",
-    "added": "Tangazo limeongezwa",
-    "name": "Jina",
-    "channel": "Njia",
-    "budget": "Bajeti",
-    "teamScopeNote": "Unaona matumizi ya matangazo yote, lakini wateja wa timu yako pekee.",
-    "addSpend": "Weka matumizi",
-    "addSpendHint": "Kila kiingizo ni cha kudumu. Kurekebisha, weka kiingizo kingine.",
-    "spentOn": "Tarehe",
-    "spendAdded": "Matumizi yamewekwa"
+  "dashboard": {
+    "period": {
+      "day": "Leo",
+      "week": "Wiki hii",
+      "month": "Mwezi huu",
+      "quarter": "Robo hii"
+    },
+    "leadsCreated": "Wateja walioingia",
+    "contactsMade": "Mawasiliano yaliyofanyika",
+    "closedWon": "Waliofanikiwa",
+    "closedWonByProduct": "Waliofanikiwa, kwa bidhaa",
+    "lostByReason": "Walipotea, kwa nini",
+    "upcomingEvents": "Matukio yanayokuja",
+    "noUpcomingEvents": "Hakuna tukio ndani ya siku 30 zijazo",
+    "hotLeads": "Wanaoahidi zaidi",
+    "noHotLeads": "Hakuna mteja aliyewekwa moto",
+    "totalWon": "Jumla {count}"
   },
-  "expenses": {
-    "subtitle": "Daftari la matumizi",
-    "add": "Ongeza",
-    "amount": "Kiasi",
-    "category": "Aina",
-    "allocation": "Imegawiwa wapi?",
-    "allocationHelp": "Hii ndiyo inayowezesha kupima CAC kwa kila mtu au kila tangazo.",
-    "staffId": "Kitambulisho cha mfanyakazi",
-    "description": "Maelezo",
-    "saved": "Matumizi yameongezwa",
-    "invalidAmount": "Kiasi si sahihi.",
-    "none": "Hakuna matumizi",
-    "noneBody": "Ongeza matumizi ili CAC iweze kupimwa.",
-    "appendOnlyTitle": "Haiwezi kubadilishwa wala kufutwa",
-    "appendOnlyBody": "Kila kiingizo kinabaki kama kilivyo. Kurekebisha, ongeza kiingizo kipya chenye kiasi hasi.",
-    "grandTotal": "Jumla {amount}"
-  },
-  "expenseCategory": {
-    "ad_spend": "Matangazo",
-    "salary": "Mshahara",
-    "commission": "Komisheni",
-    "airtime": "Vocha",
-    "data": "Bundle",
-    "transport": "Usafiri",
-    "tools": "Vifaa",
-    "rent": "Kodi",
-    "other": "Nyingine"
-  },
-  "allocation": {
-    "campaign": "Tangazo",
-    "staff": "Mfanyakazi",
-    "team": "Timu",
-    "overhead": "Gharama za jumla"
-  },
-  "analytics": {
-    "subtitle": "Pesa ilikwenda wapi, na ikaleta nini?",
-    "cac": "Gharama ya kupata mteja (CAC)",
-    "leadsCreated": "Wateja",
-    "won": "Wamefanikiwa",
-    "lost": "Wamepotea",
-    "revenue": "Mapato",
-    "investment": "Uwekezaji",
-    "winRate": "Kiwango cha mafanikio",
-    "cpl": "Gharama/mteja",
-    "salesCycle": "Muda wa kufunga",
-    "days": "siku",
-    "trend": "Mwenendo",
-    "funnel": "Hatua za mauzo",
-    "perStaff": "CAC kwa kila mfanyakazi",
-    "perStaffNote": "Namba yenye wateja wachache si kipimo — ni kelele. Angalia (n=).",
-    "staff": "Mfanyakazi",
-    "perChannel": "Kwa njia",
-    "lossReasons": "Sababu za kupoteza",
-    "noData": "Hakuna taarifa kwa mwezi huu",
-    "cohort": "Kwa mwezi walioingia",
-    "period": "Kwa mwezi walipofungwa",
-    "cohortCaption": "Gharama na matokeo yanahesabiwa kwa mwezi mteja ALIPOINGIA. Jibu: je, pesa ya mwezi ule ilifaa?",
-    "periodCaption": "Matokeo yanahesabiwa kwa mwezi biashara ILIPOFUNGWA. Jibu: tulifanyaje mwezi huu?",
-    "incompleteCohort": "Mwezi huu bado haujakamilika — biashara nyingi bado ziko wazi, hivyo namba zitapanda.",
-    "noCostAccess": "Nafasi yako haihusishi kuona gharama. Muombe msimamizi, meneja au mfanyakazi wa fedha aone CAC na matumizi.",
-    "countShare": "Idadi · Asilimia",
-    "policyNote": "Mishahara: {salaries} · Komisheni: {commission} · Gharama za jumla: {overhead} · Uhusishaji: {model}"
-  },
-  "funnel": {
-    "created": "Wameingia",
-    "contacted": "Wamewasiliana",
-    "qualified": "Wamethibitishwa",
-    "quoted": "Wamepewa bei",
-    "won": "Wamefanikiwa"
-  },
-  "metrics": {
-    "noData": "Hakuna taarifa ya kutosha",
-    "lowConfidence": "Wateja wachache mno — namba hii si ya kuaminika",
-    "lowConfidenceNote": "Namba zenye wateja chini ya {n} zimefifishwa: ni kelele, si kipimo."
-  },
-  "overheadMethod": {
-    "by_revenue": "kwa mapato",
-    "by_leads": "kwa wateja",
-    "equal": "sawa kwa wote",
-    "none": "haijajumuishwa"
-  },
-  "attributionModel": {
-    "first_touch": "mguso wa kwanza",
-    "last_touch": "mguso wa mwisho",
-    "linear": "sawa kwa yote"
-  },
-  "pagination": {
-    "label": "Kurasa",
-    "showing": "Inaonyesha {from}-{to} kati ya {total}",
-    "page": "Uk. {page}/{pageCount}",
-    "previous": "Iliyopita",
-    "next": "Ifuatayo",
-    "perPage": "Kwa ukurasa",
-    "perPageOption": "{n} kwa ukurasa",
-    "first": "Ukurasa wa kwanza",
-    "last": "Ukurasa wa mwisho",
-    "goToPage": "Nenda ukurasa {page}"
-  },
-  "list": {
-    "showMore": "Onyesha wengine {count}",
-    "showAll": "Onyesha wote",
-    "showLess": "Onyesha wachache",
-    "andMore": "na wengine {count}",
-    "loadOlder": "Pakia za zamani",
-    "noMore": "Hakuna zaidi",
-    "topN": "Wa juu {count}",
-    "collapsed": "{shown} kati ya {total}"
+  "leadDetail": {
+    "event": "Tukio",
+    "noEvent": "Bado hakuna tarehe ya tukio",
+    "source": "Chanzo",
+    "owner": "Mhusika",
+    "reassign": "Hamishia mwingine",
+    "reassignTitle": "Hamishia mteja huyu",
+    "reassignHint": "Chagua atakayemhudumia mteja huyu sasa.",
+    "reassignSave": "Hamishia",
+    "reassigned": "Mteja amehamishiwa {name}",
+    "hot": "Kiongozi cha moto",
+    "hotOn": "Amewekwa kama wa moto",
+    "hotOff": "Alama ya moto imeondolewa",
+    "deals": "Bidhaa",
+    "noDeals": "Bado hakuna bidhaa",
+    "noDealsBody": "Ongeza bidhaa ya kwanza anayoipenda mteja huyu.",
+    "addProduct": "Ongeza bidhaa",
+    "addProductTitle": "Ongeza bidhaa",
+    "addProductEmpty": "Kila bidhaa tayari ina mpango ulio wazi.",
+    "productAdded": "{product} imeongezwa",
+    "closeWon": "Weka imefanikiwa",
+    "closeLost": "Weka imepotea",
+    "reopen": "Fungua tena",
+    "reopened": "Mpango umefunguliwa tena",
+    "closedWon": "{product} imefanikiwa",
+    "closedLost": "{product} imepotea",
+    "confirmCloseWon": "Weka {product} kama imefanikiwa?",
+    "logActivity": "Andika mawasiliano",
+    "snoozeAction": "Ahirisha"
   },
   "setup": {
     "title": "Usanidi",
