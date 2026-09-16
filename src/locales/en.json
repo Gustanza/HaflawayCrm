@@ -182,7 +182,11 @@
     "allClearBody": "You have followed up with everyone for now. Add a new lead, or take a break.",
     "scheduledLater": "{count} scheduled further out",
     "mayBeMore": "there may be more not shown",
-    "due": "Due"
+    "due": "Due",
+    "focusLabel": "Show only",
+    "focusClear": "Nothing left in this view",
+    "focusClearBody": "You have cleared everything under this filter. Show the whole queue to carry on.",
+    "showAll": "Show the whole queue"
   },
   "activity": {
     "title": "Log what happened",

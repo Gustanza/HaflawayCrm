@@ -17,6 +17,14 @@ import { outcomeMessageKey } from '@/domain/taxonomies.js'
 
 const props = defineProps({
   lead: { type: Object, required: true },
+  /**
+   * One line instead of two — the outcome and the note side by side rather than stacked.
+   *
+   * The work queue's rows give this a full-width line of its own, and every row in a
+   * section has to be exactly as tall as the next or the list stops reading as a list. A
+   * lead with a note would otherwise be 20px taller than the one above it.
+   */
+  inline: { type: Boolean, default: false },
 })
 
 /**
@@ -55,6 +63,19 @@ const isEmpty = computed(() => !outcome.value && !note.value)
 
 <template>
   <div v-if="isEmpty" class="text-sm text-slate-400">—</div>
+
+  <!-- One line: outcome, then the customer's own words after a separator. Both truncate
+       together, which is what keeps a queue row the same height whether a note exists. -->
+  <p v-else-if="inline" class="min-w-0 truncate text-sm" :title="note ?? undefined">
+    <span v-if="outcome" class="font-medium" :class="TONE[outcome] ?? 'text-slate-700'">
+      {{ $t(outcomeMessageKey(outcome)) }}
+      <span v-if="attempts" class="font-normal opacity-80">
+        {{ $t('lastContact.attempts', { count: attempts }) }}
+      </span>
+    </span>
+    <span v-if="outcome && note" class="text-slate-300" aria-hidden="true"> · </span>
+    <span v-if="note" class="text-slate-500">{{ note }}</span>
+  </p>
 
   <div v-else class="min-w-0">
     <p v-if="outcome" class="truncate text-sm font-medium" :class="TONE[outcome] ?? 'text-slate-700'">

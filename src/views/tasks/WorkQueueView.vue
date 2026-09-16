@@ -18,8 +18,16 @@
  *
  * The paginator is `compact`: the section heading already carries the label and the true
  * total, so it renders controls and a quiet count and nothing else.
+ *
+ * THE LAYOUT (rewritten)
+ *
+ * The rows were an eight-column table 56rem wide, which on the deployment screen meant a
+ * horizontal scrollbar and a name wrapping onto two lines beside a due pill doing the
+ * same. Rows now reflow instead of scrolling — see QueueLeadRow.vue for the arrangement.
+ * The counts moved into the header as a row of focus chips, so the same numbers that
+ * describe the day also narrow it to one bucket; nothing else on this screen filters.
  */
-import { computed, reactive, ref } from 'vue'
+import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth.js'
 import { useCollection } from '@/composables/useCollection.js'
@@ -28,12 +36,8 @@ import { useUserNames } from '@/composables/useUserNames.js'
 import { leadsQuery } from '@/services/queries.js'
 import { priorityScore, followUpBucket } from '@/domain/scoring.js'
 import { daysToEvent, toDate } from '@/domain/periods.js'
-import { formatPhone, toTelLink, toWhatsAppLink } from '@/domain/phone.js'
 import PageHeader from '@/components/layout/PageHeader.vue'
-import StageBadge from '@/components/leads/StageBadge.vue'
-import EventCountdown from '@/components/leads/EventCountdown.vue'
-import NextActionCountdown from '@/components/leads/NextActionCountdown.vue'
-import LastContact from '@/components/leads/LastContact.vue'
+import QueueLeadRow from '@/components/leads/QueueLeadRow.vue'
 import LogActivityDialog from '@/components/leads/LogActivityDialog.vue'
 import LoadingRows from '@/components/ui/LoadingRows.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
@@ -110,6 +114,18 @@ const nothingToDo = computed(
   () => loaded.value && !overdue.value.length && !dueToday.value.length && !upcoming.value.length,
 )
 
+/**
+ * The owner's name is rendered only when it can possibly differ between rows.
+ *
+ * The table used to give every row an OWNER cell, which for the common case — an agent
+ * looking at their own queue, or a manager whose screen happens to hold one person's work
+ * — printed the same name forty times down the page. A column that never varies carries no
+ * information; it just makes every other column narrower.
+ */
+const showOwner = computed(
+  () => canSeeOtherOwners.value && new Set(items.value.map((l) => l.ownerId)).size > 1,
+)
+
 /* -------------------------------------------------- progressive disclosure */
 
 /**
@@ -120,7 +136,7 @@ const nothingToDo = computed(
  * through 13 overdue leads to reach today's. Each section is independently addressable,
  * so "Overdue, page 2" means something on its own.
  *
- * Page size 10: about a screen and a half of cards on a phone, and well above the real
+ * Page size 10: about a screen and a half of rows on a phone, and well above the real
  * per-agent load, so for the primary user the paginator never appears at all.
  */
 const SECTION_PAGE_SIZE = 10
@@ -135,15 +151,39 @@ const pagers = {
 }
 
 /**
- * `wrap` tints the table's own edge, not just the heading above it. A section heading and
+ * Each section's own voice: a dot, a heading, a count pill, and the tint on the card that
+ * holds its rows. §10.2 wants Overdue to be the loudest thing on the page, and it is the
+ * only section that gets a colour — a screen where three things shout says nothing.
+ *
+ * `card` tints the rows' container, not just the heading above it. A section heading and
  * the card under it reading as two unrelated objects is what made this screen look
- * assembled rather than designed — and the colour is doing real work here, since §10.2
- * wants Overdue to be the loudest thing on the page.
+ * assembled rather than designed.
  */
 const SECTION_STYLE = {
-  overdue: { heading: 'text-rose-700', badge: 'bg-rose-600 text-white', wrap: 'ring-rose-200' },
-  today: { heading: 'text-slate-800', badge: 'bg-slate-700 text-white', wrap: '' },
-  upcoming: { heading: 'text-slate-600', badge: 'bg-slate-200 text-slate-700', wrap: '' },
+  overdue: {
+    heading: 'text-rose-800',
+    dot: 'bg-rose-600',
+    badge: 'bg-rose-600 text-white',
+    card: 'ring-rose-200',
+    chipOff: 'bg-white text-rose-700 ring-rose-300',
+    chipOn: 'bg-rose-600 text-white ring-rose-600',
+  },
+  today: {
+    heading: 'text-slate-800',
+    dot: 'bg-slate-700',
+    badge: 'bg-slate-800 text-white',
+    card: 'ring-slate-200',
+    chipOff: 'bg-white text-slate-700 ring-slate-300',
+    chipOn: 'bg-slate-800 text-white ring-slate-800',
+  },
+  upcoming: {
+    heading: 'text-slate-700',
+    dot: 'bg-slate-300',
+    badge: 'bg-slate-200 text-slate-700',
+    card: 'ring-slate-200',
+    chipOff: 'bg-white text-slate-700 ring-slate-300',
+    chipOn: 'bg-slate-800 text-white ring-slate-800',
+  },
 }
 
 function section(id, leads) {
@@ -161,13 +201,35 @@ function section(id, leads) {
 }
 
 // Overdue is deliberately first and loudest (§10.2).
-const sections = computed(() =>
+const allSections = computed(() =>
   [
     section('overdue', overdue.value),
     section('today', dueToday.value),
     section('upcoming', upcoming.value),
   ].filter((s) => s.total > 0),
 )
+
+/**
+ * The focus chips — the counts of the day, doubling as the only filter on the screen.
+ *
+ * An agent with eleven overdue leads wants the other two sections gone while they clear
+ * them; a manager glancing at the screen wants the three numbers without scrolling. Those
+ * are the same control, so the header carries totals that are also buttons, rather than a
+ * separate stat strip above a separate filter row.
+ *
+ * 'all' is the default and always present. Empty buckets get no chip, matching the lead
+ * list's filter rows — a chip that would show nothing is a target that only disappoints.
+ */
+const focus = ref('all')
+
+const sections = computed(() =>
+  focus.value === 'all'
+    ? allSections.value
+    : allSections.value.filter((s) => s.id === focus.value),
+)
+
+/** A bucket can empty out under a live listener while it is the one being looked at. */
+const focusEmpty = computed(() => focus.value !== 'all' && !sections.value.length)
 
 /**
  * Leads scheduled more than 7 days out. Real, open, and deliberately NOT in the three
@@ -190,7 +252,7 @@ const dueCount = computed(
 const logTarget = ref(null)
 const openLog = (lead) => (logTarget.value = lead)
 
-/** Context-appropriate "Due" cell — a bare time in Today, a full date further out. */
+/** Context-appropriate "Due" text — a bare time in Today, a full date further out. */
 const timeFormat = computed(
   () =>
     new Intl.DateTimeFormat(locale.value === 'sw' ? 'sw-TZ' : 'en-GB', {
@@ -222,15 +284,9 @@ function dueLabel(lead, sectionId) {
   return dateTimeFormat.value.format(next)
 }
 
-function telLink(lead) {
-  return toTelLink(lead.primaryPhoneNormalized || lead.primaryPhone)
-}
-function whatsappLink(lead) {
-  return toWhatsAppLink(
-    lead.primaryPhoneNormalized || lead.primaryPhone,
-    t('lead.whatsappGreeting', { name: lead.displayName ?? '' }),
-  )
-}
+/** Written out in full — Tailwind cannot see a class name assembled at runtime. */
+const CHIP =
+  'inline-flex items-center gap-2 rounded-full px-3.5 text-sm font-medium ring-1 ring-inset transition-colors'
 </script>
 
 <template>
@@ -251,6 +307,51 @@ function whatsappLink(lead) {
         <RouterLink :to="{ name: 'lead-new' }" class="btn-primary text-sm">
           + {{ $t('nav.newLead') }}
         </RouterLink>
+      </template>
+
+      <!--
+        The day's shape, as buttons. Lives in the header so it stays put while a long
+        Overdue section scrolls — it is how you change what the screen IS, not part of it.
+
+        Hidden entirely when there is nothing to narrow: one bucket with work in it does
+        not need a filter beside an "All" that would show the same rows.
+      -->
+      <template v-if="allSections.length > 1" #toolbar>
+        <div
+          class="flex flex-wrap items-center gap-2"
+          role="group"
+          :aria-label="$t('queue.focusLabel')"
+        >
+          <button
+            type="button"
+            class="rounded-full px-3.5 text-sm font-medium ring-1 ring-inset transition-colors"
+            :class="
+              focus === 'all'
+                ? 'bg-slate-800 text-white ring-slate-800'
+                : 'bg-white text-slate-700 ring-slate-300 hover:bg-slate-50'
+            "
+            style="min-height: 2.25rem"
+            :aria-pressed="focus === 'all'"
+            @click="focus = 'all'"
+          >
+            {{ $t('leads.all') }}
+          </button>
+
+          <button
+            v-for="s in allSections"
+            :key="s.id"
+            type="button"
+            :class="[CHIP, focus === s.id ? s.chipOn : s.chipOff]"
+            style="min-height: 2.25rem"
+            :aria-pressed="focus === s.id"
+            @click="focus = focus === s.id ? 'all' : s.id"
+          >
+            {{ s.label }}
+            <!-- The count is the point of the chip as much as the label is, so it is
+                 rendered at full strength rather than dimmed into decoration. -->
+            <span class="tabular-nums opacity-80">{{ s.total }}</span>
+          </button>
+        </div>
       </template>
     </PageHeader>
 
@@ -274,106 +375,55 @@ function whatsappLink(lead) {
       </RouterLink>
     </EmptyState>
 
+    <!-- The last lead in the focused bucket can be cleared while it is on screen: the
+         listener is live, so the rows simply vanish. Say what happened and offer the way
+         back, rather than leaving a heading over an empty card. -->
+    <EmptyState
+      v-else-if="focusEmpty"
+      :title="$t('queue.focusClear')"
+      :body="$t('queue.focusClearBody')"
+    >
+      <button type="button" class="btn-secondary" @click="focus = 'all'">
+        {{ $t('queue.showAll') }}
+      </button>
+    </EmptyState>
+
     <div v-else class="space-y-6">
       <section v-for="s in sections" :key="s.id" :aria-labelledby="`q-${s.id}`">
-        <h2
-          :id="`q-${s.id}`"
-          class="mb-2.5 flex items-center gap-2 text-sm font-semibold tracking-tight"
-          :class="s.heading"
-        >
+        <div class="mb-2.5 flex items-center gap-2">
+          <h2
+            :id="`q-${s.id}`"
+            class="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.06em]"
+            :class="s.heading"
+          >
+            <!-- Colour is never the only signal (§13): the dot is a repetition of what the
+                 heading already says in words, for the reader scanning rather than reading. -->
+            <span class="size-2 rounded-full" :class="s.dot" aria-hidden="true" />
+            {{ s.label }}
+          </h2>
           <span
-            class="inline-flex items-center justify-center min-w-6 h-6 px-1.5 rounded-full text-xs"
+            class="inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5
+                   text-xs font-semibold tabular-nums"
             :class="s.badge"
           >{{ s.total }}</span>
-          {{ s.label }}
-        </h2>
+          <!-- A hairline carrying the eye from the heading to the rows it belongs to. -->
+          <span class="h-px flex-1 bg-slate-200" aria-hidden="true" />
+        </div>
 
-        <div class="data-table-wrap" :class="s.wrap">
-          <table class="data-table min-w-[56rem]">
-            <thead>
-              <tr>
-                <th>{{ $t('leads.name') }}</th>
-                <th>{{ $t('leads.event') }}</th>
-                <th>{{ $t('leads.stage') }}</th>
-                <!-- Between the stage and the clock, because it is what turns "overdue"
-                     into an instruction. -->
-                <th>{{ $t('lastContact.heading') }}</th>
-                <th v-if="canSeeOtherOwners">{{ $t('leads.owner') }}</th>
-                <th>{{ $t('queue.due') }}</th>
-                <th>{{ $t('leads.phone') }}</th>
-                <th class="text-right">{{ $t('leads.actions') }}</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="lead in s.shown" :key="lead.id" :class="s.id === 'overdue' ? 'bg-rose-50/40' : ''">
-                <td>
-                  <RouterLink
-                    :to="{ name: 'lead-detail', params: { id: lead.id } }"
-                    class="font-semibold text-slate-900 hover:text-brand-700"
-                  >
-                    {{ lead.displayName || $t('lead.unnamed') }}
-                  </RouterLink>
-                </td>
-                <td>
-                  <EventCountdown :event-date="lead.eventDate" :event-type="lead.eventType" compact />
-                </td>
-                <td><StageBadge :stage="lead.stage" /></td>
-                <td class="max-w-[18rem]"><LastContact :lead="lead" /></td>
-                <td v-if="canSeeOtherOwners" class="text-slate-600">{{ nameFor(lead.ownerId) }}</td>
-                <!-- Overdue gets the pill, not tinted text: §13 puts this screen outdoors
-                     on a cheap LCD, where rose-700 on white is the first thing to wash out.
-                     Today and Coming up keep an absolute time — an agent planning their day
-                     wants "14:30", not "in 5h". -->
-                <td v-if="s.id === 'overdue'">
-                  <NextActionCountdown :at="lead.nextActionAt" />
-                </td>
-                <td v-else class="text-slate-600">
-                  {{ dueLabel(lead, s.id) }}
-                </td>
-                <td class="text-slate-600 tabular-nums">
-                  {{ formatPhone(lead.primaryPhoneNormalized || lead.primaryPhone) }}
-                </td>
-                <td class="text-right">
-                  <div class="flex items-center justify-end gap-1">
-                    <a
-                      v-if="telLink(lead)"
-                      :href="telLink(lead)"
-                      class="icon-btn"
-                      :aria-label="`${$t('lead.call')} ${lead.displayName}`"
-                    >
-                      <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                           stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                        <path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2 4.2 2 2 0 0 1 4 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8.1 9.9a16 16 0 0 0 6 6l1.3-1.1a2 2 0 0 1 2.1-.5c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2z" />
-                      </svg>
-                    </a>
-                    <a
-                      v-if="whatsappLink(lead)"
-                      :href="whatsappLink(lead)"
-                      target="_blank"
-                      rel="noopener"
-                      class="icon-btn"
-                      :aria-label="`${$t('lead.whatsapp')} ${lead.displayName}`"
-                    >
-                      <svg class="size-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                        <path d="M12 2a10 10 0 0 0-8.6 15l-1.3 4.7 4.8-1.3A10 10 0 1 0 12 2zm0 18a8 8 0 0 1-4.1-1.1l-.3-.2-2.9.8.8-2.8-.2-.3A8 8 0 1 1 12 20zm4.4-5.9c-.2-.1-1.4-.7-1.6-.8s-.4-.1-.5.1l-.8.9c-.1.2-.3.2-.5.1a6.6 6.6 0 0 1-3.2-2.8c-.1-.2 0-.4.1-.5l.4-.5.2-.4v-.4l-.7-1.7c-.2-.4-.4-.4-.5-.4h-.5a1 1 0 0 0-.7.3 3 3 0 0 0-.9 2.2 5.2 5.2 0 0 0 1.1 2.7 11.9 11.9 0 0 0 4.6 4 5.3 5.3 0 0 0 3.2.5 2.7 2.7 0 0 0 1.7-1.2 2.1 2.1 0 0 0 .2-1.2c0-.1-.2-.2-.4-.3z" />
-                      </svg>
-                    </a>
-                    <button
-                      type="button"
-                      class="icon-btn"
-                      :aria-label="`${$t('lead.log')} ${lead.displayName}`"
-                      @click="openLog(lead)"
-                    >
-                      <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                           stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                        <path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
-                      </svg>
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            </tbody>
-          </table>
+        <!-- One card per section, rows hairlined inside it. `divide-y` rather than a border
+             on each row, so the first and last rows meet the card's rounded corners cleanly. -->
+        <div class="overflow-hidden rounded-xl bg-white shadow-sm ring-1" :class="s.card">
+          <ul class="divide-y divide-slate-100">
+            <li v-for="lead in s.shown" :key="lead.id">
+              <QueueLeadRow
+                :lead="lead"
+                :bucket="s.id"
+                :due="dueLabel(lead, s.id)"
+                :owner-name="showOwner ? nameFor(lead.ownerId) : ''"
+                @log="openLog"
+              />
+            </li>
+          </ul>
         </div>
 
         <!-- Compact: the section heading already carries the label and the true total,

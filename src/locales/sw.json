@@ -182,7 +182,11 @@
     "allClearBody": "Umemaliza kufuatilia wote kwa sasa. Ongeza mteja mpya au pumzika.",
     "scheduledLater": "wengine {count} wamepangwa mbele",
     "mayBeMore": "huenda wapo wengine wasioonyeshwa",
-    "due": "Muda"
+    "due": "Muda",
+    "focusLabel": "Onyesha tu",
+    "focusClear": "Hakuna kilichobaki hapa",
+    "focusClearBody": "Umemaliza kazi zote za kichujio hiki. Onyesha orodha yote ili kuendelea.",
+    "showAll": "Onyesha orodha yote"
   },
   "activity": {
     "title": "Andika kilichotokea",
