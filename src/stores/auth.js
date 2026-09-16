@@ -25,7 +25,7 @@ import {
 import { auth, getDb } from '@/firebase/app.js'
 import { useUiStore } from '@/stores/ui.js'
 
-export const ROLES = Object.freeze(['admin', 'manager', 'finance', 'agent', 'viewer'])
+export const ROLES = Object.freeze(['admin', 'manager', 'agent'])
 
 /** Human-readable messages for the Firebase error codes users actually hit. */
 const AUTH_ERRORS = {
@@ -89,24 +89,19 @@ export const useAuthStore = defineStore('auth', () => {
 
   const isAdmin = computed(() => role.value === 'admin')
   const isManager = computed(() => role.value === 'admin' || role.value === 'manager')
-  const isFinance = computed(() => role.value === 'admin' || role.value === 'finance')
   const isAgent = computed(() => role.value === 'agent')
 
-  /** Mirrors firestore.rules §7.1. Keep the two in step. */
+  /** Mirrors firestore.rules §4. Keep the two in step. */
   const can = computed(() => ({
     createLead: ['admin', 'manager', 'agent'].includes(role.value),
     reassignLead: isManager.value,
-    viewCosts: isFinance.value || isManager.value,
-    editCosts: isFinance.value,
-    lockMonth: isFinance.value,
     manageUsers: isAdmin.value,
     editSettings: isAdmin.value,
-    viewAllLeads: ['admin', 'finance', 'viewer'].includes(role.value),
+    viewAllLeads: isAdmin.value,
     viewTeamLeads: isManager.value,
-    viewAuditLog: isAdmin.value,
     // Admin ONLY, never manager. This is the one irreversible action in the product: it
-    // destroys the timeline, releases the phone lock, and moves historical CAC. A manager
-    // reassigns and closes leads; they do not get to erase one.
+    // destroys the timeline and releases the phone lock. A manager reassigns and closes
+    // leads; they do not get to erase one.
     deleteLead: isAdmin.value,
   }))
 
@@ -332,7 +327,7 @@ export const useAuthStore = defineStore('auth', () => {
   return {
     user, claims, profile, initialising, busy, errorKey,
     isSignedIn, uid, role, teamId, orgId, isProvisioned, isActive, canUseApp,
-    displayName, locale, isAdmin, isManager, isFinance, isAgent, can,
+    displayName, locale, isAdmin, isManager, isAgent, can,
     init, signIn, registerAccount, signOut, resetPassword, changePassword, refreshClaims,
     setLocale, clearError,
   }

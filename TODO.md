@@ -180,27 +180,33 @@ Extends the existing `firestore.rules` (identity/org helpers, `users`, `usersPub
 ## Phase 0 — Clear the decks
 
 - [x] Archive the legacy plan (`TODO.md` → `TODO.legacy.md`); write this document.
-- [ ] Remove domain modules tied to the dropped model: `src/domain/stages.js`,
+- [x] Remove domain modules tied to the dropped model: `src/domain/stages.js`,
       `src/domain/scoring.js`, `src/domain/metrics.js`, `src/domain/money.js` (git rm — recoverable
       from history if a later phase genuinely needs deal-value arithmetic).
-- [ ] Rewrite `src/domain/taxonomies.js`: `PRODUCT_TYPES`, `LEAD_SOURCES`, `CHANNELS`,
-      `CALL_OUTCOMES` (keep — still useful), `DEAL_STATUS`, `LOST_REASONS`. Drop `BUDGET_BANDS`.
-- [ ] Remove `src/composables/useStageMessage.js` (tied to the dropped pipeline state machine).
-- [ ] Remove tests tied to dropped modules: `tests/unit/stages.test.js`, `scoring.test.js`,
-      `metrics.test.js`, `money.test.js`, `tests/rules/leads.rules.test.js` (rewrite fresh instead),
-      `tests/rules/crossorg.rules.test.js` (rewrite fresh), `tests/rules/delete.rules.test.js`
-      (rewrite fresh), `tests/rules/list.rules.test.js` (rewrite fresh),
+- [x] Rewrite `src/domain/taxonomies.js`: `PRODUCT_TYPES`, `LEAD_SOURCES`, `CHANNELS`,
+      `CALL_OUTCOMES` (keep — still useful), `DEAL_STATUSES`, `LOST_REASONS`. Drop `BUDGET_BANDS`.
+- [x] Remove `src/composables/useStageMessage.js` (tied to the dropped pipeline state machine).
+- [x] Remove tests tied to dropped modules: `tests/unit/stages.test.js`, `scoring.test.js`,
+      `metrics.test.js`, `money.test.js`, `tests/rules/leads.rules.test.js`,
+      `tests/rules/crossorg.rules.test.js`, `tests/rules/delete.rules.test.js`,
+      `tests/rules/list.rules.test.js`,
       `tests/integration/campaigns.integration.test.js`,
       `tests/integration/finance-integrity.integration.test.js`,
       `tests/integration/campaign-attribution.integration.test.js`,
       `tests/integration/analytics.integration.test.js`,
-      `tests/integration/leads.integration.test.js` (rewrite fresh),
-      `tests/integration/queries.integration.test.js` (rewrite fresh),
-      `tests/unit/delete-lead.test.js` (rewrite fresh), `tests/unit/void-activity.test.js`
-      (rewrite fresh against the new schema), all of `tests/views/*` (the views they mount are
-      gone — rewrite once the new views exist).
-- [ ] Simplify `ROLES` in `src/stores/auth.js` to `['admin', 'manager', 'agent']`; update the
-      `can` computed (drop `viewCosts`/`editCosts`/`lockMonth`); update `role.*` i18n keys.
+      `tests/integration/leads.integration.test.js`,
+      `tests/integration/queries.integration.test.js`,
+      `tests/unit/delete-lead.test.js`, `tests/unit/void-activity.test.js`,
+      all of `tests/views/*` (the views they mount are gone). Trimmed the now-dead
+      money-specific `describe` blocks out of `tests/unit/regressions.test.js` (its
+      periods/phone regression cases stay — those modules are kept). `npx vitest run`:
+      9 files, 142 tests, all green. To rewrite fresh once the matching new code exists:
+      leads/deals/activities rules tests, leads/queries integration tests. (Rules and
+      integration tests need a running emulator — deferred to Phase 1/6, not run this session.)
+- [x] Simplify `ROLES` in `src/stores/auth.js` to `['admin', 'manager', 'agent']`; update the
+      `can` computed (drop `viewCosts`/`editCosts`/`lockMonth`/`viewAuditLog`, `viewAllLeads`
+      now admin-only since there's no viewer role). `role.*` i18n keys still need pruning —
+      folded into Phase 5 (i18n) rather than done twice.
 
 ## Phase 1 — Domain & rules foundation
 

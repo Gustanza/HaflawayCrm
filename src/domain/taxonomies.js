@@ -1,12 +1,21 @@
 /**
- * Shared vocabulary — TODO.md §4.
+ * Shared vocabulary — TODO.md §2, §3.
  *
- * Kept in one place so the quick-add chips, the seed script, the filters and the analytics
+ * Kept in one place so the quick-add chips, the lead/deal forms, filters and the dashboard
  * groupings cannot drift apart. If a value is added here it must also be added to both
- * locale files; tests/unit/taxonomies.test.js enforces that.
+ * locale files.
  */
 
-/** Event types, in the order the chips should appear — commonest first (P7). */
+/** What Haflaway sells, in the order the chips should appear — commonest first. */
+export const PRODUCT_TYPES = Object.freeze([
+  'committee_invite', // Kadi za Mwaliko wa Kamati
+  'contribution_reminder', // Reminder za Michango
+  'contribution_card', // Kadi za Michango
+  'invitation_card', // Kadi za Mwaliko (the event invitation itself)
+  'other',
+])
+
+/** Event types a lead's occasion can be, in the order the chips should appear. */
 export const EVENT_TYPES = Object.freeze([
   'harusi',
   'send_off',
@@ -17,32 +26,23 @@ export const EVENT_TYPES = Object.freeze([
   'other',
 ])
 
-/** Where a lead came from. Frozen onto `attribution` at creation and never edited (P5). */
+/** Where a lead came from. */
 export const LEAD_SOURCES = Object.freeze([
-  'whatsapp',
-  'instagram',
   'facebook',
-  'field',
+  'instagram',
+  'whatsapp',
+  'committee_visit',
   'referral',
   'walk_in',
   'other',
 ])
 
-/** Channels an interaction can happen through. */
-export const CHANNELS = Object.freeze([
-  'call',
-  'whatsapp',
-  'sms',
-  'in_person',
-  'facebook',
-  'instagram',
-  'email',
-])
+/** Channels a contact attempt can happen through. */
+export const CHANNELS = Object.freeze(['call', 'whatsapp', 'sms', 'in_person', 'other'])
 
 /**
- * Call outcomes. Borrowed from Close.com (§3) because a CRM built for high-volume calling
- * has already learned which distinctions matter — "switched off" and "no answer" mean
- * different things to a follow-up cadence.
+ * Call/contact outcomes. Distinct outcomes matter because "switched off" and "no answer"
+ * mean different things for how soon to try again.
  */
 export const CALL_OUTCOMES = Object.freeze([
   'spoke',
@@ -56,14 +56,9 @@ export const CALL_OUTCOMES = Object.freeze([
 /**
  * The i18n message key for a stored outcome token.
  *
- * The tokens are snake_case because that is the house style for stored enums; the message
- * keys are camelCase because that is the house style for i18n. Something has to bridge
- * them, and until now three places each did it their own way - an array in
- * LogActivityDialog, a four-deep nested ternary inside a LeadDetailView template, and any
- * new caller that had to rediscover the problem. A third caller got it wrong and rendered
- * the raw key `activity.outcome.no_answer` to the user, which is what prompted this.
- *
- * Returns the full key so callers cannot forget the prefix.
+ * The tokens are snake_case (house style for stored enums); the message keys are camelCase
+ * (house style for i18n). Centralised so a caller cannot forget the prefix or hand-roll the
+ * case conversion and get it wrong.
  */
 const OUTCOME_MESSAGE_KEYS = Object.freeze({
   spoke: 'spoke',
@@ -78,5 +73,25 @@ export function outcomeMessageKey(outcome) {
   return `activity.outcome.${OUTCOME_MESSAGE_KEYS[outcome] ?? outcome}`
 }
 
-/** Budget bands, TZS. `unknown` is an explicit "not yet established", not a null. */
-export const BUDGET_BANDS = Object.freeze(['unknown', '<50k', '50-150k', '150-500k', '500k+'])
+/** A deal's lifecycle — per product, per lead. See TODO.md §3. */
+export const DEAL_STATUSES = Object.freeze(['open', 'closed_won', 'closed_lost'])
+
+export function isOpenDeal(status) {
+  return status === 'open'
+}
+
+export function isClosedDeal(status) {
+  return status === 'closed_won' || status === 'closed_lost'
+}
+
+/** Why a deal was lost. Free-text notes are expected alongside `other`. */
+export const LOST_REASONS = Object.freeze([
+  'price',
+  'chose_competitor',
+  'did_it_themselves',
+  'event_cancelled',
+  'no_budget',
+  'no_response',
+  'wrong_fit',
+  'other',
+])
