@@ -1,17 +1,11 @@
 <script setup>
-import { computed, onMounted, onUnmounted, watch } from 'vue'
+import { onMounted, onUnmounted, watch } from 'vue'
 import { useAuthStore } from '@/stores/auth.js'
 import { useUiStore } from '@/stores/ui.js'
 import { setLocale } from '@/i18n.js'
-import AppLayout from '@/components/layout/AppLayout.vue'
-import AuthLayout from '@/components/layout/AuthLayout.vue'
-import ToastHost from '@/components/ui/ToastHost.vue'
-import OfflineBanner from '@/components/ui/OfflineBanner.vue'
 
 const auth = useAuthStore()
 const ui = useUiStore()
-
-const layout = computed(() => (auth.canUseApp ? AppLayout : AuthLayout))
 
 let unbindConnectivity = () => {}
 
@@ -38,8 +32,8 @@ watch(
 </script>
 
 <template>
-  <!-- The first paint happens before Firebase has resolved the session. Showing the
-       login form here and then yanking it away would be worse than a brief hold. -->
+  <!-- The first paint happens before Firebase has resolved the session. Showing app
+       content here and then yanking it away would be worse than a brief hold. -->
   <div v-if="auth.initialising" class="min-h-dvh grid place-items-center bg-slate-50">
     <div class="flex flex-col items-center gap-3">
       <div
@@ -50,15 +44,5 @@ watch(
     </div>
   </div>
 
-  <template v-else>
-    <!-- AppLayout renders its own banner above its sticky header; rendering one here too
-         would put two elements at viewport top fighting over z-index. -->
-    <OfflineBanner v-if="!auth.canUseApp" />
-    <component :is="layout">
-      <RouterView v-slot="{ Component }">
-        <component :is="Component" />
-      </RouterView>
-    </component>
-    <ToastHost />
-  </template>
+  <RouterView v-else />
 </template>
