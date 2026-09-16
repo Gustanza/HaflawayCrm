@@ -72,7 +72,7 @@ describe('NaN never reaches a period key', () => {
     expect(dayKey(NaN)).toBeNull()
     expect(weekKey(NaN)).toBeNull()
     expect(monthKey(NaN)).toBeNull()
-    expect(periodKeys(NaN)).toEqual({ dayKey: null, weekKey: null, monthKey: null })
+    expect(periodKeys(NaN)).toEqual({ dayKey: null, weekKey: null, monthKey: null, quarterKey: null })
     expect(startOfOrgDay(NaN)).toBeNull()
     expect(endOfOrgDay(NaN)).toBeNull()
   })

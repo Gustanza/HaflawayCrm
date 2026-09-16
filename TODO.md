@@ -210,18 +210,43 @@ Extends the existing `firestore.rules` (identity/org helpers, `users`, `usersPub
 
 ## Phase 1 — Domain & rules foundation
 
-- [ ] `src/domain/followUp.js`: pure functions for queue bucketing (overdue/today/upcoming from
-      `nextFollowUpAt` + "now"), quick-chip offset resolution (2h/tomorrow 9am/3 days/1 week),
-      and display formatting ("2 days overdue", "in 3h"). Unit-tested.
-  - [x] Reused as-is: `src/domain/phone.js`, `src/domain/periods.js`, `src/domain/org.js`.
-- [ ] Rewrite `firestore.rules` per §4. Delete the dropped collections' match blocks.
-- [ ] Rewrite `firestore.indexes.json`: `leads` (ownerId+nextFollowUpAt, teamId+nextFollowUpAt,
-      orgId+monthKey), `deals` collection-group (orgId+status+closedMonthKey, orgId+productType+
-      status), `activities` collection-group (orgId+monthKey, byUserId+at).
-- [ ] Rules tests: `tests/rules/leads.rules.test.js` (ownership, reassignment, team scoping),
-      `tests/rules/deals.rules.test.js` (closing requires reason/timestamp/actor), `tests/rules/
-      activities.rules.test.js` (append-only, void-only update), `tests/rules/collectiongroup.rules.test.js`
-      (the B22-style cross-org leak check for the dashboard's collection-group queries).
+- [x] `src/domain/followUp.js`: pure functions for queue bucketing (overdue/today/upcoming from
+      `nextFollowUpAt` + "now"), quick-chip offset resolution (2h/tomorrow9am/3d/1w), and
+      display description (`describeFollowUp` → i18n key + count) and queue sorting
+      (`sortByFollowUp`). Unit-tested (`tests/unit/followUp.test.js`).
+  - [x] Added `quarterKey()` to `src/domain/periods.js` (the dashboard's period toggle needs
+        day/week/month/quarter; only the first three existed). Updated its tests.
+  - [x] Reused as-is: `src/domain/phone.js`, `src/domain/org.js`.
+- [x] Rewrote `firestore.rules` per §4. Dropped the CAC-era collections' match blocks
+      (campaigns, expenses, costAllocationPolicy, customers, projects, products, quotes,
+      rollups, notifications, settings, auditLogs, importJobs, leadDeletions) — nothing in
+      this plan writes them. Kept orgs/users/usersPublic/teams/leadPhoneIndex unchanged.
+      **Found and fixed a real bug via the emulator, not by reading**: combining
+      `canReadLeadById(leadId)` (a parent `get()`) with `canReadOrgWide(resource.data)` in one
+      `allow list` broke the dashboard's collection-group query entirely — Firestore's list
+      provability check rejects the whole boolean expression once a get() with a
+      per-document-variable path appears anywhere in it, even behind `||`. Fixed by splitting
+      into two separate top-level `match` blocks (Firestore ORs every block that matches a
+      document); see the comment on `canReadOrgWide()` in firestore.rules.
+- [x] Rewrote `firestore.indexes.json`: leads (ownerId/teamId+nextFollowUpAt, ownerId+updatedAt,
+      dayKey/weekKey/monthKey/quarterKey, eventDate), deals collection-group
+      (orgId+status+closedDayKey/Week/Month/QuarterKey), activities collection-group
+      (orgId+dayKey/weekKey/monthKey/quarterKey, isVoided+at).
+- [x] Rules tests written AND run against the real Firestore emulator (`npm run test:rules` —
+      Java + firebase-tools are available in this environment): `tests/rules/leads.rules.test.js`,
+      `tests/rules/deals.rules.test.js`, `tests/rules/activities.rules.test.js`,
+      `tests/rules/collectiongroup.rules.test.js` (the org-scoping check for the dashboard's
+      collection-group queries — this is what caught the bug above). Also repaired
+      `tests/rules/orgs.rules.test.js`, which still worked structurally but exercised the
+      now-dropped `expenses`/`settings` collections as stand-in test fixtures; swapped those
+      for `leads`, and deleted the one test that specifically asserted `settings/bootstrap`
+      behaviour (that collection no longer exists). **93 rules tests, 5 files, all green.**
+  - [ ] `tests/integration/auth.integration.test.js` had the same staleness (finance/viewer
+        accounts, expenses/campaigns reads) — trimmed to match the new role set, but NOT run
+        this session: it needs `scripts/seed.js` rewritten for the new lead/deal/activity
+        schema first (still seeds the old stage/attribution shape). Rewriting `seed.js` is
+        folded into Phase 2 (services), since it should be written against the same
+        `leads.service.js`/`deals.service.js` the app uses, not duplicate the shape by hand.
 
 ## Phase 2 — Services & stores
 

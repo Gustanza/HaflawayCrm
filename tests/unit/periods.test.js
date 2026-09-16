@@ -5,6 +5,7 @@ import {
   dayKey,
   weekKey,
   monthKey,
+  quarterKey,
   periodKeys,
   daysBetween,
   daysToEvent,
@@ -90,12 +91,28 @@ describe('weekKey — ISO 8601', () => {
 })
 
 describe('periodKeys', () => {
-  it('returns all three keys for one instant', () => {
+  it('returns all four keys for one instant', () => {
     expect(periodKeys('2026-08-24T09:00:00+03:00')).toEqual({
       dayKey: '2026-08-24',
       weekKey: '2026-W35',
       monthKey: '2026-08',
+      quarterKey: '2026-Q3',
     })
+  })
+})
+
+describe('quarterKey', () => {
+  it('buckets each month into its calendar quarter', () => {
+    expect(quarterKey('2026-01-15T09:00:00+03:00')).toBe('2026-Q1')
+    expect(quarterKey('2026-03-31T23:59:00+03:00')).toBe('2026-Q1')
+    expect(quarterKey('2026-04-01T00:00:00+03:00')).toBe('2026-Q2')
+    expect(quarterKey('2026-08-24T09:00:00+03:00')).toBe('2026-Q3')
+    expect(quarterKey('2026-12-31T09:00:00+03:00')).toBe('2026-Q4')
+  })
+
+  it('returns null for an unreadable value', () => {
+    expect(quarterKey(null)).toBeNull()
+    expect(quarterKey('not a date')).toBeNull()
   })
 })
 

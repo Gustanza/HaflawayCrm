@@ -3,52 +3,26 @@ rules_version = '2';
 // =============================================================================
 // Haflaway CRM — Firestore security rules
 //
-// TODO.md P10: rules ARE the domain model. "The UI hides that button" is not access
-// control when 50 people share a database and commission depends on the numbers.
+// TODO.md §4: rules ARE the access-control layer, not the UI. Identity/org plumbing below
+// (orgs, users, usersPublic, teams, leadPhoneIndex) is unchanged from the legacy plan and
+// already proven. The `leads` / `leads/{id}/deals` / `leads/{id}/activities` blocks are new,
+// for the lean per-product-deal model in TODO.md §3.
 //
-// Authorisation reads CUSTOM CLAIMS only (role, teamId, orgId, active). Claims are free
-// to evaluate; reading the user document inside a rule would bill a read on every single
-// operation. `scripts/syncClaims.js` is the authority that keeps claims and the users
-// document in step.
-//
-// Every rule here has a matching test in tests/rules/.
+// Authorisation reads CUSTOM CLAIMS first (role, teamId, orgId, active), falling back to the
+// `users/{uid}` document only for an account not yet synced — see the comment on `role()`
+// below for why.
 // =============================================================================
 
 service cloud.firestore {
   match /databases/{database}/documents {
 
     // ---------------------------------------------------------------------
-    // Identity helpers
+    // Identity helpers — unchanged from the legacy plan
     // ---------------------------------------------------------------------
 
     function isSignedIn() {
       return request.auth != null;
     }
-
-    /**
-     * ── AUTHORISATION SOURCE: CLAIM FIRST, DOCUMENT AS FALLBACK ──────────────
-     *
-     * The custom claim is still the fast path and the authority. But a browser CANNOT set
-     * a custom claim — that is Admin SDK only — so a claim-only model means no in-app
-     * screen can ever finish provisioning a colleague. Somebody always has to go and run
-     * a script, which is not a product.
-     *
-     * So: if the claim is present, use it and read nothing. If it is absent, fall back to
-     * `users/{uid}`. Firestore evaluates only the taken branch of a ternary, so a
-     * provisioned user pays ZERO extra reads — the fallback costs one document read, only
-     * for accounts whose claims have not been synced yet, and identical get() calls are
-     * memoised within a request.
-     *
-     * That makes `users/{uid}` security-relevant, so note what guards it: only an admin
-     * may write `role`, `teamId`, `orgId` or `isActive` (see the /users rules below), a
-     * user's own self-update is restricted to presentation fields, and the one exception —
-     * appointing yourself admin of an org you just registered — is gated behind owning that
-     * org's `orgs/{orgId}` document (see the registration block below).
-     *
-     * The `functions/index.js` `onCreate` trigger normally turns the fallback back into the
-     * fast path within moments; `scripts/syncClaims.js` remains worth running by hand as a
-     * backstop, and disabling the Auth account is still what revokes a session instantly.
-     */
 
     function claim(name) {
       return request.auth.token.get(name, '');
@@ -83,12 +57,6 @@ service cloud.firestore {
       return hasClaims() ? claim('orgId') : (hasProfile() ? profile().orgId : '');
     }
 
-    /**
-     * A deactivated staff member keeps a valid token until it expires; the `active` claim
-     * revokes access on the next refresh, and disabling the Auth account
-     * (scripts/syncClaims.js) revokes it at once. On the document path, `isActive: false`
-     * does the same job.
-     */
     function isActive() {
       return isSignedIn() && (
         hasClaims()
@@ -107,12 +75,6 @@ service cloud.firestore {
 
     function isAdmin()   { return hasRole(['admin']); }
     function isManager() { return hasRole(['admin', 'manager']); }
-    function isFinance() { return hasRole(['admin', 'finance']); }
-
-    // Anyone who may see lead data at all.
-    function canReadAllLeads() {
-      return hasRole(['admin', 'finance', 'viewer']);
-    }
 
     // ---------------------------------------------------------------------
     // Data helpers
@@ -125,7 +87,6 @@ service cloud.firestore {
       return incoming().diff(existing()).affectedKeys();
     }
 
-    // The write only touches keys in `allowed`.
     function onlyChanged(allowed) {
       return changedKeys().hasOnly(allowed);
     }
@@ -134,7 +95,6 @@ service cloud.firestore {
       return !(field in changedKeys());
     }
 
-    // Every document belongs to the caller's organisation.
     function inMyOrg() {
       return incoming().orgId == myOrg();
     }
@@ -143,19 +103,10 @@ service cloud.firestore {
       return existing().orgId == myOrg();
     }
 
-    /**
-     * A write must not clobber a document owned by another organisation.
-     *
-     * `inMyOrg()` alone is not enough: it only checks the orgId the caller is SENDING, so
-     * a rival could overwrite `settings/org` — a guessable, global document ID — just by
-     * stamping their own orgId on it. On create `resource` is null, which is the only case
-     * where there is nothing to protect.
-     */
     function notClobberingAnotherOrg() {
       return resource == null || resource.data.orgId == myOrg();
     }
 
-    /** The org that owns a user document — for writes addressed at another person. */
     function userRef(userId) {
       return /databases/$(database)/documents/users/$(userId);
     }
@@ -179,76 +130,9 @@ service cloud.firestore {
     }
 
     // ---------------------------------------------------------------------
-    // Pipeline state machine — TODO.md §5.2
-    // Mirrored in src/domain/stages.js. Both must agree; tests/rules asserts it.
+    // orgs — self-service registration, unchanged from the legacy plan
     // ---------------------------------------------------------------------
 
-    function allowedNextStages(from) {
-      // A COMPLETE graph - every stage reaches every stage. Must stay identical to
-      // TRANSITIONS in src/domain/stages.js, which carries the reasoning; a test parses
-      // this block and fails the build if the two drift apart.
-      return {
-        'new':          ['new', 'contacted', 'unreachable', 'qualified', 'quoted', 'negotiation', 'won', 'lost', 'parked', 'nurture', 'disqualified'],
-        'contacted':    ['new', 'contacted', 'unreachable', 'qualified', 'quoted', 'negotiation', 'won', 'lost', 'parked', 'nurture', 'disqualified'],
-        'unreachable':  ['new', 'contacted', 'unreachable', 'qualified', 'quoted', 'negotiation', 'won', 'lost', 'parked', 'nurture', 'disqualified'],
-        'qualified':    ['new', 'contacted', 'unreachable', 'qualified', 'quoted', 'negotiation', 'won', 'lost', 'parked', 'nurture', 'disqualified'],
-        'quoted':       ['new', 'contacted', 'unreachable', 'qualified', 'quoted', 'negotiation', 'won', 'lost', 'parked', 'nurture', 'disqualified'],
-        'negotiation':  ['new', 'contacted', 'unreachable', 'qualified', 'quoted', 'negotiation', 'won', 'lost', 'parked', 'nurture', 'disqualified'],
-        'nurture':      ['new', 'contacted', 'unreachable', 'qualified', 'quoted', 'negotiation', 'won', 'lost', 'parked', 'nurture', 'disqualified'],
-        'parked':       ['new', 'contacted', 'unreachable', 'qualified', 'quoted', 'negotiation', 'won', 'lost', 'parked', 'nurture', 'disqualified'],
-        'won':          ['new', 'contacted', 'unreachable', 'qualified', 'quoted', 'negotiation', 'won', 'lost', 'parked', 'nurture', 'disqualified'],
-        'lost':         ['new', 'contacted', 'unreachable', 'qualified', 'quoted', 'negotiation', 'won', 'lost', 'parked', 'nurture', 'disqualified'],
-        'disqualified': ['new', 'contacted', 'unreachable', 'qualified', 'quoted', 'negotiation', 'won', 'lost', 'parked', 'nurture', 'disqualified']
-      }.get(from, []);
-    }
-
-    function stageTransitionValid() {
-      return unchanged('stage')
-          || (incoming().stage in allowedNextStages(existing().stage)
-              // REOPENING. The graph no longer polices the route a deal takes, but leaving
-              // a closed stage un-counts a win or a loss and moves figures 8 has already
-              // published. Entering a closed stage still needs only the required fields
-              // (closureFieldsPresent below); pulling one back out needs a manager.
-              && (!(existing().stage in ['won', 'lost', 'disqualified']) || isManager()));
-    }
-
-    // Closing a lead demands the fields the analytics layer depends on (§5.2 invariants).
-    function closureFieldsPresent() {
-      return unchanged('stage')
-          || !(incoming().stage in ['won', 'lost', 'disqualified'])
-          || (incoming().closedAt == request.time
-              && incoming().closedBy == uid()
-              // A loss reason of "" is not a loss reason. §8 groups every closed lead by
-              // it, and an empty string becomes a bucket nobody can act on.
-              && (incoming().stage != 'lost'
-                  || (incoming().lossReason is string && incoming().lossReason.size() > 0))
-              // §5.2: a won lead needs a deal value GREATER THAN ZERO. Checking only
-              // `is int` allowed a deal to be won at 0 — or at -50,000,000, which would
-              // silently drag every revenue and CAC figure in its period downwards.
-              && (incoming().stage != 'won'
-                  || (incoming().dealValueMinor is int && incoming().dealValueMinor > 0)));
-    }
-
-    // ---------------------------------------------------------------------
-    // users — profile and role assignment
-    // ---------------------------------------------------------------------
-
-    /**
-     * ── SELF-SERVICE ORGANISATION REGISTRATION ────────────────────────────────
-     *
-     * Anyone signed in may mint a brand-new `orgId` and become its admin — repeatably, not
-     * a one-time global event. `orgs/{orgId}` is the uniqueness lock: Firestore only allows
-     * a `create` write when no document already exists at that path (`allow create` below
-     * pins that further), so the document's EXISTENCE is the claim. Two callers racing for
-     * the same orgId can never both win; the loser sees the doc already there and the
-     * client tries the next candidate slug (see registerOrganization() in
-     * provisioning.service.js). No boolean latch is needed the way the old single global
-     * `settings/bootstrap` sentinel needed one, because this mutex is per-orgId rather than
-     * per-deployment.
-     *
-     * `orgs/{orgId}` is never updatable or deletable — its identity is permanent, which is
-     * exactly what makes its mere existence a trustworthy lock.
-     */
     function orgRef(orgId) {
       return /databases/$(database)/documents/orgs/$(orgId);
     }
@@ -257,24 +141,15 @@ service cloud.firestore {
       return exists(orgRef(orgId)) && get(orgRef(orgId)).data.ownerUid == uid();
     }
 
-    /**
-     * Mirrors ORG_ID_PATTERN in src/domain/org.js, functions/index.js and
-     * scripts/syncClaims.js. orgId is the prefix of the leadPhoneIndex/{orgId}_{phone} key
-     * (§6.4) — an underscore here would corrupt that split.
-     */
     function validOrgIdFormat(orgId) {
       return orgId.matches('^[a-z0-9-]{2,40}$');
     }
 
     match /orgs/{orgId} {
-      // Private: only a member of this org, or the person who created it, may read an
-      // EXISTING doc. A nonexistent doc leaks nothing, so probing for a free slug during
-      // registration is always allowed — that is how the collision-retry loop tells "taken"
-      // from "free" without needing a separate directory to query.
       allow get:  if resource == null
                   || (isSignedIn() && myOrg() == orgId)
                   || (isSignedIn() && resource.data.ownerUid == uid());
-      allow list: if false; // never enumerable — no browsing other companies' names
+      allow list: if false;
 
       allow create: if isSignedIn()
                     && validOrgIdFormat(orgId)
@@ -286,38 +161,15 @@ service cloud.firestore {
                     && incoming().name.size() > 0
                     && incoming().name.size() <= 200;
 
-      allow update, delete: if false; // identity is permanent — this IS the uniqueness lock
+      allow update, delete: if false;
     }
 
     match /users/{userId} {
-      // Own profile, or a colleague if you are a manager or above.
-      //
-      // Firestore cannot project fields, so `allow read` hands over the WHOLE document —
-      // which §6.2 says carries targets, commission rate, phone and FCM tokens. Letting
-      // every agent read every colleague meant every agent could read every colleague
-      // pay data. Display names for lead lists come from usersPublic instead.
-      // `viewer` is the LOWEST-privilege role and was reading commission rates and FCM
-      // tokens off colleagues, which is the opposite of what the role means. Managers and
-      // finance keep access because they genuinely administer targets and payroll; if that
-      // ever stops being true, move the pay fields to their own document rather than
-      // widening this rule again.
-      //
-      // `resource == null` is its own branch, gated on isAdmin() rather than readingMyOrg():
-      // readingMyOrg() dereferences resource.data, which errors (not "false") when resource
-      // is null, so a `get` on a uid with no profile yet was refused outright rather than
-      // returning "not found." That broke adoptExistingUser()'s whole purpose — checking
-      // whether a console-made uid is already provisioned before adopting it — for the one
-      // case it exists to handle: a uid that genuinely has no profile yet. A nonexistent
-      // document carries no org's data to protect, so admin-only is enough of a gate.
       allow read: if resource == null
                   ? isAdmin()
                   : (isActive() && readingMyOrg()
-                     && (userId == uid() || isManager() || hasRole(['finance'])));
+                     && (userId == uid() || isManager()));
 
-      // Roles are granted by an admin — from the Setup screen, or scripts/syncClaims.js.
-      // Never self-service, with exactly one exception: appointing yourself admin of an
-      // org you just registered, which is only reachable because `orgs/{orgId}` already
-      // names you as its owner (see the block above).
       allow create: if (isAdmin() && inMyOrg())
                     || (isSignedIn()
                         && userId == uid()
@@ -325,8 +177,6 @@ service cloud.firestore {
                         && incoming().isActive == true
                         && isOrgOwner(incoming().orgId));
 
-      // A user may edit their own presentation only. Role, team and active status are
-      // admin-only: self-promotion would defeat every other rule in this file.
       allow update: if isAdmin() && readingMyOrg() && updateStamped()
                     || (isActive()
                         && userId == uid()
@@ -334,29 +184,24 @@ service cloud.firestore {
                                         'fcmTokens', 'lastActiveAt', 'updatedAt', 'updatedBy'])
                         && updateStamped());
 
-      allow delete: if false; // soft delete only — TODO.md §6.1
+      allow delete: if false;
     }
 
-    // Redacted mirror: display name and photo only. Safe for anyone in the org to read,
-    // which is what a lead list actually needs. Same pattern as campaignsPublic.
     match /usersPublic/{userId} {
       allow read:  if isActive() && readingMyOrg();
       allow write: if (isAdmin() && inMyOrg() && notClobberingAnotherOrg())
-                   // Same exception as /users: the owner of a freshly registered org
-                   // writes their own row.
                    || (isSignedIn() && userId == uid() && isOrgOwner(incoming().orgId));
     }
 
     match /teams/{teamId} {
       allow read:   if isActive() && readingMyOrg();
       allow write:  if isAdmin() && inMyOrg() && notClobberingAnotherOrg();
-      // Explicit, so the next reader knows it is deliberate rather than an accident of
-      // inMyOrg() dereferencing a null request.resource on delete. §6.1: soft delete only.
       allow delete: if false;
     }
 
     // ---------------------------------------------------------------------
-    // leads — the core object
+    // leads — the core object. No pipeline stage: a lead's PRODUCTS (deals,
+    // below) close independently. TODO.md §3.
     // ---------------------------------------------------------------------
 
     function ownsLead()      { return existing().ownerId == uid(); }
@@ -365,9 +210,9 @@ service cloud.firestore {
 
     function canReadLead() {
       return isActive() && readingMyOrg() && (
-        canReadAllLeads()
+        isAdmin()
         || ownsLead()
-        || leadUnowned()                              // the claimable pool
+        || leadUnowned()
         || (isManager() && leadInMyTeam())
       );
     }
@@ -381,16 +226,17 @@ service cloud.firestore {
     }
 
     // -------------------------------------------------------------------
-    // Sub-collection authorisation.
+    // Sub-collection authorisation for a document reached via a FIXED leadId — a `get`, or a
+    // `list` scoped to exactly one lead's subcollection (Lead Detail's deal cards / timeline).
+    // Fetching the parent by `leadId` is provable in both cases because `leadId` is a single
+    // known value for that request, not one that varies across many results.
     //
-    // Inside `match /leads/{leadId}/activities/{id}`, `resource` is the ACTIVITY,
-    // not the lead — so the helpers above would read ownerId/orgId off the wrong
-    // document and silently deny everything. Permission for a child document is a
-    // property of its parent, so we fetch the parent explicitly.
-    //
-    // Cost: one billed document read per request. Identical get() calls are memoised
-    // within a single request, so listing a whole timeline still costs one read, not
-    // one per activity.
+    // This does NOT extend to a true collectionGroup('deals'|'activities') query spanning
+    // every lead — there, `leadId` varies per potential match, so Firestore cannot prove a
+    // parent get() and rejects the query outright ("Avoid a document read for collection
+    // group queries" is Firestore's own guidance). The dashboard's collection-group reads
+    // are authorised separately, below, using only `resource.data` (hence `orgId` is
+    // denormalised onto every deal and activity — TODO.md §3).
     // -------------------------------------------------------------------
 
     function leadRef(leadId) {
@@ -406,7 +252,7 @@ service cloud.firestore {
           && exists(leadRef(leadId))
           && parentLead(leadId).orgId == myOrg()
           && (
-            canReadAllLeads()
+            isAdmin()
             || parentLead(leadId).ownerId == uid()
             || parentLead(leadId).ownerId == null
             || (isManager() && parentLead(leadId).teamId == myTeam())
@@ -424,6 +270,25 @@ service cloud.firestore {
           );
     }
 
+    // A collection-group read authorised purely from the document's own denormalised orgId
+    // plus a role check — provable for any query that filters `orgId == myOrg()`, which is
+    // mandatory client-side (see queries.js). Managers/admins only: agents never issue a
+    // cross-lead collection-group query in this product; their own lead's deals/activities
+    // are read via the single-lead `list`, authorised by `canReadLeadById` instead.
+    //
+    // Deliberately used ONLY from the top-level `match /{path=**}/deals|activities` blocks
+    // below, never combined with a `canReadLeadById()` get() in the same `allow` expression.
+    // Firestore's list-provability check rejects the WHOLE boolean expression the instant a
+    // get() appears anywhere in it with a path that varies per document (which `leadId` does
+    // across a true collection-group query) — it does not short-circuit a `||` the way a
+    // normal evaluator would. Confirmed by `tests/rules/collectiongroup.rules.test.js`
+    // failing outright when this was combined with `canReadLeadById(leadId)` in one `allow
+    // list`. Firestore DOES let multiple `match` blocks matching the same document OR
+    // together, so the fix is two separate blocks instead of one combined condition.
+    function canReadOrgWide(data) {
+      return isActive() && isManager() && data.orgId == myOrg();
+    }
+
     match /leads/{leadId} {
       allow read: if canReadLead();
 
@@ -431,42 +296,69 @@ service cloud.firestore {
                     && hasRole(['admin', 'manager', 'agent'])
                     && inMyOrg()
                     && createStamped()
-                    && incoming().stage == 'new'
-                    && incoming().attribution.capturedByUserId == uid()
-                    // An agent may only create leads owned by themselves; managers and
-                    // admins may create on someone's behalf.
                     && (isManager() || incoming().ownerId == uid());
 
       allow update: if canWriteLead()
                     && updateStamped()
-                    && stageTransitionValid()
-                    && closureFieldsPresent()
-                    // Attribution is frozen at creation — TODO.md P5. If it could be
-                    // edited, every CAC number could be quietly rewritten after the fact.
-                    && unchanged('attribution')
                     && unchanged('orgId')
-                    // Anti-poaching: only a manager or admin reassigns a lead (§7.2).
+                    // Anti-poaching: only a manager or admin reassigns a lead.
                     && (unchanged('ownerId') || isManager())
-                    // Only a manager may unilaterally claim a lead out of the pool.
                     && (unchanged('previousOwnerIds') || isManager());
 
-      // HARD DELETE — admin only, and deliberately an exception to the soft-delete policy
-      // in TODO.md 249. `deleteLead()` in leads.service.js empties every subcollection
-      // FIRST and removes this document LAST, precisely because the child rules below
-      // require this document to still exist. Reversing that order strands children that
-      // nothing can then delete.
+      // Hard delete — admin only. leads.service.js empties `deals` and `activities` FIRST
+      // and removes this document LAST, because the child rules above require the parent
+      // to still exist for a non-admin read; the admin cascade below is the exception.
       allow delete: if isAdmin() && readingMyOrg();
 
-      // -----------------------------------------------------------------
-      // activities — APPEND-ONLY. TODO.md P1 and P4.
-      // The timeline is the primary record; deleting from it destroys the audit trail
-      // that makes commission disputes resolvable.
-      // -----------------------------------------------------------------
-      match /activities/{activityId} {
-        allow read: if canReadLeadById(leadId);
+      // ---------------------------------------------------------------
+      // deals — one per product the lead has engaged with. Closes independently per
+      // product (TODO.md §3): "closed for reminders, still open for the invitation".
+      // ---------------------------------------------------------------
+      match /deals/{dealId} {
+        allow get:  if canReadLeadById(leadId);
+        allow list: if canReadLeadById(leadId);
 
         allow create: if isActive()
                       && canWriteLeadById(leadId)
+                      && incoming().orgId == myOrg()
+                      && incoming().status == 'open'
+                      && createStamped();
+
+        allow update: if isActive()
+                      && canWriteLeadById(leadId)
+                      && updateStamped()
+                      && unchanged('orgId')
+                      && (
+                        unchanged('status')
+                        || (incoming().status == 'closed_won'
+                            && incoming().closedAt == request.time
+                            && incoming().closedBy == uid())
+                        || (incoming().status == 'closed_lost'
+                            && incoming().closedAt == request.time
+                            && incoming().closedBy == uid()
+                            && incoming().lostReason is string
+                            && incoming().lostReason.size() > 0)
+                        // Reopening a closed deal — manager/admin only, mirrors the lead
+                        // reassignment gate: it un-counts a win or a loss on the dashboard.
+                        || (incoming().status == 'open' && isManager())
+                      );
+
+        allow delete: if isAdmin() && canReadLeadById(leadId);
+      }
+
+      // ---------------------------------------------------------------
+      // activities — APPEND-ONLY contact log. `nextFollowUpAt` presence is enforced by the
+      // client form (required unless the activity records a closing outcome), not here —
+      // the rule cannot see the sibling deal write in the same request without a
+      // transaction, and this is not a figure anyone's pay depends on.
+      // ---------------------------------------------------------------
+      match /activities/{activityId} {
+        allow get:  if canReadLeadById(leadId);
+        allow list: if canReadLeadById(leadId);
+
+        allow create: if isActive()
+                      && canWriteLeadById(leadId)
+                      && incoming().orgId == myOrg()
                       && incoming().byUserId == uid()
                       && incoming().at == request.time
                       && incoming().isVoided == false;
@@ -479,243 +371,41 @@ service cloud.firestore {
                       && incoming().voidedBy == uid()
                       && incoming().voidReason is string
                       && incoming().voidReason.size() > 0
-                      // Pin the timestamp, or a void can be backdated to 2020 and the
-                      // audit trail stops being a trail.
                       && incoming().voidedAt == request.time
                       && onlyChanged(['isVoided', 'voidedBy', 'voidReason', 'voidedAt']);
 
-        // Append-only for everyone EXCEPT an admin destroying the whole lead. A timeline
-        // cannot outlive the lead it documents: left behind it is unreachable, permanently
-        // undeletable, and still holds the customer's words. `canReadLeadById` pins this to
-        // the parent's org, since an activity carries no orgId of its own.
         allow delete: if isAdmin() && canReadLeadById(leadId);
-      }
-
-      match /contacts/{contactId} {
-        allow read:  if canReadLeadById(leadId);
-        allow write: if canWriteLeadById(leadId);
-      }
-
-      match /quotes/{quoteId} {
-        allow read:   if canReadLeadById(leadId);
-        allow create: if canWriteLeadById(leadId) && createStamped();
-        // A quote that has been sent is a statement to a customer; it may only progress.
-        allow update: if canWriteLeadById(leadId) && updateStamped()
-                      && (existing().status != 'sent' || incoming().status != 'draft');
-        // A sent quote is a statement to a customer and normally cannot be deleted. The
-        // admin cascade is the exception, for the same reason as activities above.
-        allow delete: if (canWriteLeadById(leadId) && existing().status == 'draft')
-                      || (isAdmin() && canReadLeadById(leadId));
       }
     }
 
     // ---------------------------------------------------------------------
-    // leadPhoneIndex — the duplicate lock, TODO.md §6.4
-    // Readable so the quick-add form can warn before submitting; create-only so a
-    // claimed number cannot be stolen by overwriting the index entry.
+    // Collection-group access for the dashboard (managers/admins only). Separate top-level
+    // blocks, deliberately NOT merged into the nested `leads/{leadId}/deals|activities`
+    // blocks above — see the comment on `canReadOrgWide()`. Firestore ORs every `match`
+    // block that matches a given document, so this adds a second way in for the
+    // collection-group case without touching the per-lead path's own rules.
     // ---------------------------------------------------------------------
-    // The document ID is `{orgId}_{phoneNormalized}` — see leads.service.js.
-    //
-    // Keying on the bare phone number made this a GLOBAL directory: any signed-in user
-    // could list the whole collection and harvest every claimed customer number together
-    // with the colleague who owns it, and two organisations would collide, with one
-    // permanently blocking the other from capturing a lead.
-    //
-    // Reads are still collection-wide within an org, because the duplicate check must be
-    // able to probe a document that does not exist yet — but the org prefix confines it.
+    match /{path=**}/deals/{dealId} {
+      allow list, get: if canReadOrgWide(resource.data);
+    }
+
+    match /{path=**}/activities/{activityId} {
+      allow list, get: if canReadOrgWide(resource.data);
+    }
+
+    // ---------------------------------------------------------------------
+    // leadPhoneIndex — duplicate lock, unchanged from the legacy plan (TODO.md §3).
+    // Document ID is `{orgId}_{phoneNormalized}`.
+    // ---------------------------------------------------------------------
     match /leadPhoneIndex/{key} {
       allow read:   if isActive() && key.split('_')[0] == myOrg();
       allow create: if isActive()
                     && hasRole(['admin', 'manager', 'agent'])
                     && key.split('_')[0] == myOrg()
                     && incoming().orgId == myOrg()
-                    // An agent may only claim a number for themselves; a manager may
-                    // claim on someone else behalf.
                     && (isManager() || incoming().ownerId == uid());
-      allow update: if isManager() && readingMyOrg(); // reassignment rewrites ownerId
-      allow delete: if isAdmin() && readingMyOrg();   // only for a genuine merge; audited
-    }
-
-    // ---------------------------------------------------------------------
-    // tasks — follow-up work items
-    // ---------------------------------------------------------------------
-    match /tasks/{taskId} {
-      allow read: if isActive() && readingMyOrg() && (
-        canReadAllLeads()
-        || existing().ownerId == uid()
-        || (isManager() && existing().teamId == myTeam())
-      );
-
-      allow create: if isActive()
-                    && hasRole(['admin', 'manager', 'agent'])
-                    && inMyOrg()
-                    && (isManager() || incoming().ownerId == uid());
-
-      allow update: if isActive() && readingMyOrg() && (
-        isAdmin()
-        || existing().ownerId == uid()
-        || (isManager() && existing().teamId == myTeam())
-      );
-
-      allow delete: if isManager() && readingMyOrg() && existing().teamId == myTeam();
-    }
-
-    // ---------------------------------------------------------------------
-    // MONEY. Agents get zero visibility — TODO.md §7.1.
-    // Append-only: a correction is a NEW document carrying correctsExpenseId (P4).
-    // ---------------------------------------------------------------------
-
-    // Spend lives in a sub-collection, so the same parent-fetch problem as activities
-    // applies (see B4): inside /spend, `resource` is the spend entry, which carries no
-    // orgId of its own.
-    function campaignRef(campaignId) {
-      return /databases/$(database)/documents/campaigns/$(campaignId);
-    }
-
-    function campaignInMyOrg(campaignId) {
-      return exists(campaignRef(campaignId))
-          && get(campaignRef(campaignId)).data.orgId == myOrg();
-    }
-
-    match /campaigns/{campaignId} {
-      // EVERY rule here carries an org check. Gating on role alone let a finance or
-      // manager account belonging to a DIFFERENT organisation read this org's budgets,
-      // spend and cost policy — and rewrite them. Roles are org-scoped; a role claim is
-      // not a passport into another company ledger.
-      //
-      // Agents need campaign NAMES to attribute a lead, but not the budget. Firestore
-      // cannot hide a field, so the client queries campaignsPublic instead.
-      // Viewers read campaignsPublic, not this. `auth.js` already reports
-      // `can.viewCosts === false` for viewer, and this rule contradicting it was the
-      // divergence — the rules side was wrong, not the client side.
-      allow read:   if (isManager() || isFinance()) && readingMyOrg();
-      allow create: if isFinance() && inMyOrg() && createStamped();
-      allow update: if isFinance() && readingMyOrg() && updateStamped();
-      allow delete: if false;
-
-      match /spend/{spendId} {
-        allow read:   if (isFinance() || isManager()) && campaignInMyOrg(campaignId);
-        allow create: if isFinance()
-                      && campaignInMyOrg(campaignId)
-                      && incoming().enteredBy == uid();
-        allow update: if false; // corrections are new docs with correctsSpendId
-        allow delete: if false;
-      }
-    }
-
-    // Name-and-channel only, maintained alongside campaigns. Safe for agents to read.
-    match /campaignsPublic/{campaignId} {
-      allow read:  if isActive() && readingMyOrg();
-      allow write: if isFinance() && inMyOrg() && notClobberingAnotherOrg();
-    }
-
-    match /expenses/{expenseId} {
-      allow read:   if (isFinance() || isManager()) && readingMyOrg();
-      allow create: if isFinance() && inMyOrg() && incoming().enteredBy == uid();
-      allow update: if false; // append-only ledger — P4
-      allow delete: if false;
-    }
-
-    match /costAllocationPolicy/{monthKey} {
-      allow read:   if (isFinance() || isManager()) && readingMyOrg();
-      allow create: if isFinance() && inMyOrg();
-      // Once a month is locked its numbers are history and must not move (§9).
-      allow update: if isFinance() && readingMyOrg() && existing().lockedAt == null;
-      allow delete: if false;
-    }
-
-    // ---------------------------------------------------------------------
-    // Post-win objects
-    // ---------------------------------------------------------------------
-
-    match /customers/{customerId} {
-      allow read:   if isActive() && readingMyOrg();
-      allow create: if isActive() && hasRole(['admin', 'manager', 'agent']) && inMyOrg();
-      allow update: if isActive() && hasRole(['admin', 'manager', 'agent']) && readingMyOrg();
-      allow delete: if false;
-    }
-
-    match /projects/{projectId} {
-      allow read:   if isActive() && readingMyOrg();
-      allow create: if isActive() && hasRole(['admin', 'manager', 'agent']) && inMyOrg();
-      allow update: if isActive() && hasRole(['admin', 'manager', 'agent']) && readingMyOrg();
-      allow delete: if false;
-    }
-
-    match /products/{productId} {
-      allow read:  if isActive() && readingMyOrg();
-      allow write: if isAdmin() && inMyOrg() && notClobberingAnotherOrg();
-    }
-
-    // ---------------------------------------------------------------------
-    // Rollups — split so agents can see volumes but never costs (§7.2)
-    // Written only by the trusted recompute job (Admin SDK bypasses these rules).
-    // ---------------------------------------------------------------------
-
-    match /rollups/{rollupId} {
-      allow read:  if (isFinance() || isManager()) && readingMyOrg();
-      allow write: if false;
-    }
-
-    match /rollupsPublic/{rollupId} {
-      allow read:  if isActive() && readingMyOrg();
-      allow write: if false;
-    }
-
-    // ---------------------------------------------------------------------
-    // Notifications, settings, audit
-    // ---------------------------------------------------------------------
-
-    match /notifications/{userId}/items/{itemId} {
-      allow read:   if isActive() && userId == uid();
-      allow update: if isActive() && userId == uid() && onlyChanged(['isRead']);
-      // Scoped on the RECIPIENT, not on the payload. Checking only `incoming().orgId`
-      // was useless here: a rival manager stamps their own orgId and writes into one of
-      // our agents' notification feeds — a phishing channel inside the product.
-      allow create: if isManager()
-                    && incoming().orgId == myOrg()
-                    && targetUserInMyOrg(userId);
-      allow delete: if isActive() && userId == uid();
-    }
-
-    match /settings/{docId} {
-      allow read:  if isActive() && readingMyOrg();
-      allow write: if isAdmin() && inMyOrg() && notClobberingAnotherOrg();
-    }
-
-    match /importJobs/{jobId} {
-      allow read:   if readingMyOrg()
-                    && (isManager() || (isActive() && existing().createdBy == uid()));
-      allow create: if isManager() && inMyOrg() && createStamped();
       allow update: if isManager() && readingMyOrg();
-      allow delete: if false;
-    }
-
-    // ---------------------------------------------------------------------
-    // leadDeletions - the tombstone left by a hard delete.
-    //
-    // One document per deleted lead, keyed by the dead leadId. It is how a CAC figure that
-    // moved can be explained months later, so it must outlive everyone's ability to edit
-    // it: create and complete only, never delete, and no route to rewriting the reason or
-    // the actor. Deliberately holds NO PII - see deleteLead() in leads.service.js.
-    // ---------------------------------------------------------------------
-    match /leadDeletions/{leadId} {
-      allow read:   if isAdmin() && readingMyOrg();
-      allow create: if isAdmin() && inMyOrg()
-                    && incoming().deletedBy == uid()
-                    && incoming().leadId == leadId
-                    && incoming().reason is string
-                    && incoming().reason.size() > 0;
-      // The second write only fills in the outcome. Who, why and when are already sealed.
-      allow update: if isAdmin() && readingMyOrg()
-                    && onlyChanged(['removed', 'phoneReleased', 'completedAt']);
-      allow delete: if false;
-    }
-
-    // Written server-side only. Readable by admins so disputes can be settled.
-    match /auditLogs/{logId} {
-      allow read:  if isAdmin() && readingMyOrg();
-      allow write: if false;
+      allow delete: if isAdmin() && readingMyOrg();
     }
 
     // ---------------------------------------------------------------------

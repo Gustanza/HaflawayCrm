@@ -54,9 +54,7 @@ export async function as(uid, claims = {}) {
 
 export const asAgent = (uid = 'agent1', extra = {}) => as(uid, { role: 'agent', ...extra })
 export const asManager = (uid = 'manager1', extra = {}) => as(uid, { role: 'manager', ...extra })
-export const asFinance = (uid = 'finance1', extra = {}) => as(uid, { role: 'finance', ...extra })
 export const asAdmin = (uid = 'admin1', extra = {}) => as(uid, { role: 'admin', ...extra })
-export const asViewer = (uid = 'viewer1', extra = {}) => as(uid, { role: 'viewer', ...extra })
 
 /** Signed in, but deactivated — the claim that revokes access (§7.2). */
 export const asDeactivated = (uid = 'ex-staff') => as(uid, { role: 'agent', active: false })
@@ -80,30 +78,71 @@ export async function seed(path, data) {
 
 const NOW = new Date('2026-08-24T09:00:00Z')
 
-/** A lead as it exists in the database, ready to be read or updated. */
+/** A lead as it exists in the database, ready to be read or updated. TODO.md §3. */
 export function leadDoc(overrides = {}) {
   return {
     orgId: ORG,
     ownerId: 'agent1',
+    previousOwnerIds: [],
     teamId: 'team-a',
     displayName: 'Neema & Baraka — Harusi',
+    primaryPhone: '0712345678',
     primaryPhoneNormalized: '+255712345678',
-    stage: 'new',
-    leadStatus: 'open',
+    source: 'instagram',
     eventType: 'harusi',
-    dealValueMinor: null,
-    attribution: {
-      model: 'first_touch',
-      source: 'instagram',
-      channel: 'instagram',
-      campaignId: 'camp1',
-      capturedByUserId: 'agent1',
-    },
+    eventDate: null,
+    nextFollowUpAt: NOW,
+    isHot: false,
+    dayKey: '2026-08-24',
+    weekKey: '2026-W35',
+    monthKey: '2026-08',
+    quarterKey: '2026-Q3',
     createdAt: NOW,
     createdBy: 'agent1',
     updatedAt: NOW,
     updatedBy: 'agent1',
     deletedAt: null,
+    ...overrides,
+  }
+}
+
+/** A deal as it exists under `leads/{leadId}/deals/{dealId}`. TODO.md §3. */
+export function dealDoc(overrides = {}) {
+  return {
+    orgId: ORG,
+    productType: 'invitation_card',
+    status: 'open',
+    closedAt: null,
+    closedBy: null,
+    lostReason: null,
+    createdAt: NOW,
+    createdBy: 'agent1',
+    updatedAt: NOW,
+    updatedBy: 'agent1',
+    ...overrides,
+  }
+}
+
+/** An activity as it exists under `leads/{leadId}/activities/{activityId}`. TODO.md §3. */
+export function activityDoc(overrides = {}) {
+  return {
+    orgId: ORG,
+    channel: 'call',
+    outcome: 'spoke',
+    summary: 'Discussed the committee meeting date.',
+    dealId: null,
+    byUserId: 'agent1',
+    byUserName: 'Agent One',
+    at: NOW,
+    nextFollowUpAt: NOW,
+    dayKey: '2026-08-24',
+    weekKey: '2026-W35',
+    monthKey: '2026-08',
+    quarterKey: '2026-Q3',
+    isVoided: false,
+    voidedBy: null,
+    voidReason: null,
+    voidedAt: null,
     ...overrides,
   }
 }

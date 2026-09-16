@@ -85,12 +85,6 @@ describe('a user with NO claims is authorised from their document', () => {
     await assertFails(getDoc(doc(await asClaimless(), 'leads/l2')))
   })
 
-  it('still cannot read cost data as an agent', async () => {
-    await seed('users/console-made', profileDoc({ role: 'agent' }))
-    await seed('expenses/e1', { orgId: ORG, category: 'salary', amountMinor: 1, enteredBy: 'f' })
-    await assertFails(getDoc(doc(await asClaimless(), 'expenses/e1')))
-  })
-
   it('honours isActive:false in the document exactly as the active claim would', async () => {
     await seed('users/console-made', profileDoc({ role: 'admin', isActive: false }))
     await seed('leads/l1', leadDoc({ ownerId: 'console-made' }))
@@ -105,16 +99,16 @@ describe('a user with NO claims is authorised from their document', () => {
 
   it('gives a document-authorised admin the same reach as a claim-authorised one', async () => {
     await seed('users/console-made', profileDoc({ role: 'admin' }))
-    await seed('expenses/e1', { orgId: ORG, category: 'salary', amountMinor: 1, enteredBy: 'f' })
-    await assertSucceeds(getDoc(doc(await asClaimless(), 'expenses/e1')))
+    await seed('leads/l1', leadDoc({ orgId: ORG, ownerId: 'someone-else' }))
+    await assertSucceeds(getDoc(doc(await asClaimless(), 'leads/l1')))
   })
 
   it('lets the CLAIM win when both exist, so a synced demotion takes effect immediately', async () => {
     // Document says admin, claim says agent. The claim is the authority.
     await seed('users/demoted', profileDoc({ role: 'admin' }))
-    await seed('expenses/e1', { orgId: ORG, category: 'salary', amountMinor: 1, enteredBy: 'f' })
+    await seed('leads/l1', leadDoc({ orgId: ORG, ownerId: 'someone-else' }))
     const db = await as('demoted', { role: 'agent', orgId: ORG, active: true })
-    await assertFails(getDoc(doc(db, 'expenses/e1')))
+    await assertFails(getDoc(doc(db, 'leads/l1')))
   })
 
   it('refuses an anonymous visitor regardless', async () => {
@@ -338,10 +332,10 @@ describe('the org owner, and only them, becomes its admin', () => {
 
   it('grants real admin access once the profile exists', async () => {
     await seed('users/founder', profileDoc({ role: 'admin', orgId: 'newco' }))
-    await seed('expenses/e1', { orgId: 'newco', category: 'salary', amountMinor: 1, enteredBy: 'f' })
+    await seed('leads/l1', leadDoc({ orgId: 'newco', ownerId: 'someone-else' }))
 
     const db = await asClaimless('founder')
-    await assertSucceeds(getDoc(doc(db, 'expenses/e1')))
+    await assertSucceeds(getDoc(doc(db, 'leads/l1')))
   })
 })
 
@@ -406,16 +400,5 @@ describe('users/{userId} — reading a NONEXISTENT profile (adoptExistingUser pr
 
   it('an unauthenticated visitor cannot probe at all', async () => {
     await assertFails(getDoc(doc(await asAnonymous(), 'users/never-provisioned')))
-  })
-})
-
-describe('the settings collection no longer carries a bootstrap exception', () => {
-  it('an admin can write any settings doc, including one named "bootstrap"', async () => {
-    // Confirms the old `docId != 'bootstrap'` carve-out is gone cleanly: nothing in
-    // firestore.rules treats that name specially any more, because the collection it
-    // protected no longer exists.
-    await assertSucceeds(
-      setDoc(doc(await asAdmin(), 'settings/bootstrap'), { orgId: ORG, note: 'just a doc now' }),
-    )
   })
 })

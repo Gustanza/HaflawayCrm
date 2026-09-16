@@ -81,9 +81,22 @@ export function weekKey(value) {
   return `${isoYear}-W${pad(week)}`
 }
 
-/** All three keys at once — what every document write needs. */
+/** "2026-Q3" — the org-local calendar quarter. Used by the owner dashboard's period toggle. */
+export function quarterKey(value) {
+  const d = inOrgTime(value)
+  if (!d) return null
+  const q = Math.floor(d.getMonth() / 3) + 1
+  return `${d.getFullYear()}-Q${q}`
+}
+
+/** All four keys at once — what every document write needs. */
 export function periodKeys(value) {
-  return { dayKey: dayKey(value), weekKey: weekKey(value), monthKey: monthKey(value) }
+  return {
+    dayKey: dayKey(value),
+    weekKey: weekKey(value),
+    monthKey: monthKey(value),
+    quarterKey: quarterKey(value),
+  }
 }
 
 /**

@@ -72,7 +72,7 @@ afterAll(async () => {
 
 /** Mirrors the getters in src/stores/auth.js, computed from the REAL token. */
 function gate(claims) {
-  const ROLES = ['admin', 'manager', 'finance', 'agent', 'viewer']
+  const ROLES = ['admin', 'manager', 'agent']
   const isProvisioned = ROLES.includes(claims.role) && Boolean(claims.orgId?.trim())
   const isActive = claims.active === true
   return { isProvisioned, isActive, canUseApp: isProvisioned && isActive }
@@ -87,10 +87,8 @@ async function signInAs(email) {
 describe('the seeded accounts can actually sign in', () => {
   const accounts = [
     ['admin@haflaway.com', 'admin'],
-    ['finance@haflaway.com', 'finance'],
     ['manager.dar@haflaway.com', 'manager'],
     ['agent1@haflaway.com', 'agent'],
-    ['viewer@haflaway.com', 'viewer'],
   ]
 
   it.each(accounts)('%s signs in and is granted the %s role', async (email, role) => {
@@ -164,43 +162,6 @@ describe('an agent sees their own pipeline and nothing else', () => {
     await signOut(auth)
   })
 
-  it('is refused every cost collection', async () => {
-    await signInAs('agent1@haflaway.com')
-
-    await expectDenied(
-      getDocs(query(collection(db, 'expenses'), where('orgId', '==', ORG), limit(1))),
-      'agent listing expenses',
-    )
-    await expectDenied(
-      getDocs(query(collection(db, 'campaigns'), where('orgId', '==', ORG), limit(1))),
-      'agent listing campaigns',
-    )
-    // …but the redacted mirror is readable, which is what lead attribution needs.
-    const publicCampaigns = await getDocs(
-      query(collection(db, 'campaignsPublic'), where('orgId', '==', ORG), limit(1)),
-    )
-    expect(publicCampaigns.empty).toBe(false)
-
-    await signOut(auth)
-  })
-})
-
-describe('finance sees the money, agents do not', () => {
-  it('finance reads expenses and campaigns', async () => {
-    await signInAs('finance@haflaway.com')
-
-    const expenses = await getDocs(
-      query(collection(db, 'expenses'), where('orgId', '==', ORG), limit(3)),
-    )
-    expect(expenses.empty).toBe(false)
-
-    const campaigns = await getDocs(
-      query(collection(db, 'campaigns'), where('orgId', '==', ORG), limit(3)),
-    )
-    expect(campaigns.empty).toBe(false)
-
-    await signOut(auth)
-  })
 })
 
 describe('bad credentials are refused', () => {
