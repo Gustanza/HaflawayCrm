@@ -312,23 +312,66 @@ Extends the existing `firestore.rules` (identity/org helpers, `users`, `usersPub
 
 ## Phase 4 — Screens
 
-- [ ] Auth screens: Login, Register, ForgotPassword, NoAccess (mostly porting existing copy/logic
-      onto the current `stores/auth.js`, which is unchanged).
-- [ ] Quick-add lead (screen 5).
-- [ ] Work Queue (screen 2) — the priority screen.
-- [ ] Lead list (screen 3).
-- [ ] Lead detail (screen 4): deal cards, add-a-product, log-activity dialog with mandatory
-      follow-up picker, close/reopen deal with lost-reason capture, reassign.
-- [ ] Owner dashboard (screen 6): period toggle, the metrics named in §1/§5, drill-down from each
-      number to the underlying lead list where practical.
-- [ ] Settings, Admin/Users, Setup, Forbidden, NotFound (screens 7–10).
+- [x] Auth screens: Login, Register, ForgotPassword, NoAccess. Register is self-service:
+      `registerAccount()` then `registerOrganization()` in one flow, with a distinct retryable
+      "org step failed" state. `registerAccount()` only reports success/failure, not the
+      credential, so RegisterView polls `auth.uid` briefly rather than changing the store's
+      contract — the store's own `onAuthStateChanged` listener is what populates it, and that
+      fires asynchronously relative to the create-user promise settling.
+- [x] Quick-add lead (screen 5). Phone-first, debounced inline duplicate check via
+      `checkPhoneAvailable()`, name/source/event-type/hot all optional.
+- [x] Work Queue (screen 2) — the priority screen. Overdue/today/upcoming via
+      `domain/followUp.js`, re-bucketed reactively off `useNow()`. One-tap call/WhatsApp/log/
+      snooze per row.
+- [x] Lead list (screen 3). Search (name/phone) + filter by follow-up bucket/source/owner
+      (owner filter manager/admin only — an agent's query is already scoped server-side).
+      Card-list layout (not `.data-table`) for consistency with Work Queue at the 360px floor.
+- [x] Lead detail (screen 4): deal cards (status badge, mark won via a native `confirm()`, mark
+      lost via a required-reason dialog, reopen gated manager/admin in the UI to match
+      firestore.rules), add-a-product (only product types with no open deal), activity timeline
+      with load-more and a void/retract flow (reason required, entry stays struck-through),
+      log-activity dialog with mandatory next-follow-up, reassign (manager/admin only).
+      **Deferred**: no "delete lead" UI — `deleteLead()` and its locale keys are ready, but the
+      screen-4 bullet list above never asked for it, and it is the one irreversible action in
+      the product. Left as an explicit gap rather than wiring it under time pressure.
+      **Real bug found & fixed while building this**: Vue Router reuses a component instance
+      across a param-only navigation on the same route record, so a lead-A → lead-B in-app link
+      (e.g. quick-add's "open existing lead") would NOT remount LeadDetailView, leaving its
+      Firestore listeners pointed at the old lead id. Fixed in `App.vue` by keying the routed
+      component on `route.fullPath` — app-wide, not scoped to this one screen.
+- [x] Owner dashboard (screen 6): period toggle, leads captured, contacts made, closed-won by
+      product (+ total), lost by reason, upcoming events (30-day window), hot leads — every row
+      links into Lead Detail. `meta.roles: ['admin','manager']`.
+- [x] Settings (profile name — writes both `users/{uid}` and its `usersPublic/{uid}` mirror,
+      language toggle, change password), Admin/Users (role + active/inactive, self-edit
+      disabled, links to Setup rather than duplicating its form), Setup (two-stage: org
+      bootstrap via `registerOrganization()` when the caller has no org yet, then add-a-
+      colleague via `createTeamMember()`/`adoptExistingUser()` with a create/adopt mode
+      toggle), Forbidden, NotFound (screens 7–10) — all done.
+- [x] Every route wired in `src/router/index.js` in the same step as its view file, per the
+      Phase 3 note. `npx vite build` and `npx vitest run` (164 tests) green after every chunk.
+      `npm run build`'s bundle-size gate passes with 137.7 KB of headroom on the login path.
 
 ## Phase 5 — i18n
 
-- [ ] `src/locales/en.json` / `sw.json`: keys for every new screen and taxonomy value
-      (`productType.*`, `lostReason.*`, `dealStatus.*`, `source.*`, `activity.*`, `queue.*`,
-      `dashboard.*`). Run `tests/unit/i18n.test.js`-style compile check (rewrite if needed — the
-      mechanism, not the content, is reusable).
+- [x] `src/locales/en.json` / `sw.json`: added `productType.*`, `dealStatus.*`, `channel.*`
+      (token-for-token against `domain/taxonomies.js`), `dashboard.*`, `leadDetail.*`, plus
+      `source.committee_visit` (the old file had a stale `field` key — taxonomies.js uses
+      `committee_visit`) and a handful of small additions (`quickAdd.phonePlaceholder`,
+      `quickAdd.hot`, `auth.register.displayName`, `auth.noAccess.setupLink`). Reused as-is
+      where the legacy text already fit: `queue.*`, `activity.*`, `snooze.*`, `lossReason.*`
+      and `eventType.*` (exact token matches), `nextAction.*` (exact match to
+      `describeFollowUp()`'s keys — dropped the unused `nextAction.tomorrow`, which that
+      function never actually emits), `deleteLead.*` (trimmed of quotes/CAC subkeys),
+      `detail.*` (trimmed to the generic timeline/void keys Lead Detail's activity log reuses).
+      Pruned the now-fully-dead CAC/pipeline namespaces: `campaigns`, `expenses`,
+      `expenseCategory`, `allocation`, `analytics`, `funnel`, `metrics`, `overheadMethod`,
+      `attributionModel`, `months`, `pipeline`, `stageMove`, `fieldName`, `parkReason`,
+      `urgency`, `activityType`, `budgetBand`, `stage`, `lastContact`, `list`, `pagination`,
+      plus the `role.finance`/`role.viewer` labels for the roles Phase 0 already dropped from
+      `ROLES`. `tests/unit/i18n.test.js` (compile-through-vue-i18n, key-set parity,
+      interpolation-param parity) needed no rewrite — it is data-driven off the two JSON files
+      — and passes with every key above.
 
 ## Phase 6 — Tests & hardening
 
