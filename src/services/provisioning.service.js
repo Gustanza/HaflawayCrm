@@ -37,7 +37,7 @@ import { getDb, USING_EMULATORS } from '@/firebase/app.js'
 import { slugifyOrgId, nextSlugCandidate } from '@/domain/org.js'
 
 /** Roles a person can be given. Mirrors §7.1 and firestore.rules. */
-export const ASSIGNABLE_ROLES = Object.freeze(['admin', 'manager', 'finance', 'agent', 'viewer'])
+export const ASSIGNABLE_ROLES = Object.freeze(['admin', 'manager', 'agent'])
 
 export class ProvisioningError extends Error {
   constructor(code, message) {

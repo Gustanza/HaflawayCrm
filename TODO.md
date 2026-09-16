@@ -74,6 +74,10 @@ leads/{leadId}
   nextFollowUpAt            // REQUIRED while the lead has any open deal or no deals yet — drives the queue
   nextFollowUpType          // free label, e.g. "call back", optional
   firstContactedAt, lastContactedAt, lastActivityAt
+  lastActivitySummary, lastActivityChannel, lastActivityOutcome, lastActivityId
+                             // denormalised head of the timeline (added during Phase 2) — a
+                             // list row shows "what happened last" without reading the
+                             // activities subcollection per row
   isHot                      // manual flag, boolean
   dayKey, weekKey, monthKey, quarterKey     // of createdAt — see domain/periods.js
   createdAt, createdBy, updatedAt, updatedBy, deletedAt
@@ -250,17 +254,40 @@ Extends the existing `firestore.rules` (identity/org helpers, `users`, `usersPub
 
 ## Phase 2 — Services & stores
 
-- [ ] `src/services/leads.service.js`: rewrite `createLead()` (keeps the transactional phone-lock
-      pattern), `updateLead()`, `reassignLead()`.
-- [ ] `src/services/deals.service.js`: `addDeal()`, `closeDeal(status, {lostReason})`, `reopenDeal()`.
-- [ ] `src/services/activities.service.js`: `logActivity()` — writes the activity and updates the
-      parent lead's `nextFollowUpAt`/`lastContactedAt`/`lastActivityAt` in one transaction.
-- [ ] `src/services/queries.js`: rewrite query builders for the work queue, lead list, and
-      dashboard aggregations (collection-group reads over `deals`/`activities`, always
-      `orgId`-constrained per §4).
-- [ ] `src/stores/leads.js`: wraps the above for the UI (current lead, list, mutations).
-- [ ] `src/stores/dashboard.js`: period-scoped aggregate counts (see §5 screen 6) computed via
-      live Firestore queries — no rollups needed at this scale; revisit only if it's ever slow.
+- [x] `src/services/leads.service.js`: rewritten — `createLead()` (keeps the transactional
+      phone-lock pattern; defaults `nextFollowUpAt` to now so a brand-new lead is immediately
+      queued for a first touch), `updateLead()`, `reassignLead()`, `deleteLead()` (admin hard
+      delete cascade, simplified from the legacy version — no `leadDeletions` tombstone, since
+      that collection was deliberately dropped from firestore.rules in Phase 1).
+- [x] `src/services/deals.service.js`: `addDeal()` (refuses a second simultaneously-open deal
+      of the same product on one lead), `closeDeal(status, {lostReason})` (stamps
+      `closed*Key` period fields for the dashboard), `reopenDeal()`.
+- [x] `src/services/activities.service.js`: `logActivity()` — a transaction (not just a batch,
+      unlike the legacy version) writing the activity and updating the parent lead's
+      `nextFollowUpAt`/`lastContactedAt`/`lastActivityAt` plus a denormalised "last contact"
+      preview (`lastActivitySummary/Channel/Outcome/Id` — added to the §3 lead schema; not in
+      the original sketch, needed so a list row can show "what happened last" without a
+      subcollection read per row). `voidActivity()`, `setNextFollowUp()`.
+- [x] `src/services/queries.js`: rewritten query builders — `workQueueQuery`, `leadListQuery`,
+      `upcomingEventsQuery`, `hotLeadsQuery`, `leadsCreatedInPeriodQuery`,
+      `dealsClosedInPeriodQuery`/`activitiesInPeriodQuery` (collection-group, `orgId`-constrained
+      per §4 — throws a clear error for a role that can't prove access, rather than letting an
+      opaque Firebase permission error reach the UI).
+- [x] `src/stores/leads.js`: wraps the above for the UI (work queue, lead list, current lead,
+      deals, timeline, all mutations) via the existing `useCollection`/`useDoc` composables.
+- [x] `src/stores/dashboard.js`: period-scoped aggregate counts (§5 screen 6) via one-shot
+      `Promise.all` queries, re-run on period switch — no rollups needed at this scale.
+- [x] `scripts/seed.js` rewritten for the new schema (leads/deals/activities, no more
+      campaigns/expenses/products/tasks/cost policy). Syntax-checked and re-verified against
+      the real Firestore emulator (rules tests still 93/93 green after the rewrite), but NOT
+      actually run end-to-end this session: it needs the Auth emulator too, and that
+      environment's Auth emulator binary isn't cached/downloadable in this sandbox (network-
+      restricted) — the Firestore emulator's jar was already cached from Phase 1's runs, Auth's
+      was not. **Run `npm run dev:emulators` then `npm run seed` in a normal dev environment
+      before trusting this script fully; also re-verify `tests/integration/auth.integration.test.js`
+      there** — it depends on exactly the accounts/leads this script creates.
+- [x] `src/services/provisioning.service.js`'s `ASSIGNABLE_ROLES` simplified to
+      `['admin','manager','agent']` (was carrying the dropped finance/viewer roles).
 
 ## Phase 3 — App shell
 
