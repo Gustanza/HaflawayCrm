@@ -161,3 +161,67 @@ export async function leadTimelineQuery(leadId, { max = 50, after } = {}) {
   clauses.push(fbLimit(max))
   return query(...clauses)
 }
+
+/* ------------------------------------------------------- progress (day-key ranges) */
+//
+// The Dashboard's week runs Sunday → Saturday, which no stored `weekKey` (ISO, Monday-first)
+// describes. So it asks for a range of org-local DAY keys instead — inclusive at both ends.
+// These use the same composite indexes as the period-key queries above: an equality on
+// orgId (and status), then a range on the day field.
+
+/** Contacts logged org-wide between two day keys. Manager/admin (collection group). */
+export async function activitiesInDayRangeQuery(user, { start, end, max = 5000 } = {}) {
+  assertUser(user)
+  const db = await getDb()
+  return query(
+    collectionGroup(db, 'activities'),
+    where('orgId', '==', user.orgId),
+    where('dayKey', '>=', start),
+    where('dayKey', '<=', end),
+    fbLimit(max),
+  )
+}
+
+/** Leads created between two day keys. */
+export async function leadsCreatedInDayRangeQuery(user, { start, end, max = 2000 } = {}) {
+  assertUser(user)
+  const db = await getDb()
+  return query(
+    collection(db, 'leads'),
+    where('orgId', '==', user.orgId),
+    where('dayKey', '>=', start),
+    where('dayKey', '<=', end),
+    fbLimit(max),
+  )
+}
+
+/** Deals closed (won or lost, per `status`) between two day keys. Manager/admin. */
+export async function dealsClosedInDayRangeQuery(user, { status, start, end, max = 2000 } = {}) {
+  assertUser(user)
+  const db = await getDb()
+  return query(
+    collectionGroup(db, 'deals'),
+    where('orgId', '==', user.orgId),
+    where('status', '==', status),
+    where('closedDayKey', '>=', start),
+    where('closedDayKey', '<=', end),
+    fbLimit(max),
+  )
+}
+
+/**
+ * Leads nobody has contacted yet — the Dashboard's "waiting for a first contact". Equality
+ * filters only, so no composite index is needed. `lastActivityAt` is null on creation and
+ * set by every logged contact (activities.service.js), whatever the outcome.
+ */
+export async function neverContactedLeadsQuery(user, { max = 500 } = {}) {
+  assertUser(user)
+  const db = await getDb()
+  return query(
+    collection(db, 'leads'),
+    where('orgId', '==', user.orgId),
+    ...ownershipScope(user),
+    where('lastActivityAt', '==', null),
+    fbLimit(max),
+  )
+}

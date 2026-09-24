@@ -69,6 +69,12 @@ const routes = [
     meta: { requiresAuth: true, roles: ['admin', 'manager'], titleKey: 'nav.dashboard' },
   },
   {
+    path: '/dashboard/won',
+    name: 'deals-won',
+    component: () => import('@/views/DealsWonView.vue'),
+    meta: { requiresAuth: true, roles: ['admin', 'manager'], titleKey: 'nav.dealsWon' },
+  },
+  {
     path: '/settings',
     name: 'settings',
     component: () => import('@/views/SettingsView.vue'),
@@ -113,9 +119,9 @@ router.beforeEach(async (to) => {
 
   // Wait for Firebase to resolve the session, so a refresh on a deep link does not
   // bounce the user to /login for a fraction of a second before restoring them.
-  if (authStore.initialising) {
-    await authStore.init()
-  }
+  // Also waits out a sign-in that is still reading its claims, so a fresh login is never
+  // mistaken for an unprovisioned account.
+  await authStore.ready()
 
   if (to.meta.public) {
     // Already signed in and provisioned? Skip the login/register screens.
@@ -164,26 +170,15 @@ router.onError((error) => {
 })
 
 /**
- * After navigation: name the page, and move focus to it.
+ * After navigation: name the page.
  *
- * Without the focus move, a keyboard or screen-reader user re-tabs through the whole nav
- * on every route change and is never told the page changed — the classic SPA failure.
+ * Focus is deliberately left where the browser puts it. Moving it to the page heading
+ * drew a highlight box around the title on every screen — including login — which read
+ * as a bug to the people actually using the app.
  */
 router.afterEach((to) => {
   const { t } = i18n.global
-  const title = to.meta.titleKey ? `${t(to.meta.titleKey)} · ${t('app.name')}` : t('app.name')
-  document.title = title
-
-  // Wait for the incoming view to mount before looking for its heading.
-  requestAnimationFrame(() => {
-    const target = document.querySelector('main h1') ?? document.querySelector('main')
-    if (!target) return
-    // tabindex="-1" makes a non-interactive element focusable without adding it to the
-    // tab order; removing it afterwards keeps the DOM clean.
-    target.setAttribute('tabindex', '-1')
-    target.focus({ preventScroll: true })
-    target.addEventListener('blur', () => target.removeAttribute('tabindex'), { once: true })
-  })
+  document.title = to.meta.titleKey ? `${t(to.meta.titleKey)} · ${t('app.name')}` : t('app.name')
 })
 
 export default router

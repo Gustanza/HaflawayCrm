@@ -7,6 +7,7 @@ import { useUiStore } from '@/stores/ui.js'
 import { writeErrorKey } from '@/stores/ui.js'
 import { isValidPhone } from '@/domain/phone.js'
 import { LEAD_SOURCES, EVENT_TYPES } from '@/domain/taxonomies.js'
+import FollowUpPicker from '@/components/leads/FollowUpPicker.vue'
 
 const router = useRouter()
 const { t } = useI18n()
@@ -18,6 +19,8 @@ const name = ref('')
 const source = ref('')
 const eventType = ref('')
 const isHot = ref(false)
+/** null = contact them now (the default) — the lead shows as New right away. */
+const contactAt = ref(null)
 const saving = ref(false)
 const submitted = ref(false)
 
@@ -82,6 +85,7 @@ async function onSubmit() {
       source: source.value || 'other',
       eventType: eventType.value || null,
       isHot: isHot.value,
+      ...(contactAt.value ? { nextFollowUpAt: contactAt.value } : {}),
     })
     ui.success(t('quickAdd.saved'))
     router.push({ name: 'lead-detail', params: { id: leadId } })
@@ -174,6 +178,12 @@ function openExisting() {
           <option v-for="e in EVENT_TYPES" :key="e" :value="e">{{ t(`eventType.${e}`) }}</option>
         </select>
         <p class="mt-1.5 text-sm text-slate-500">{{ t('quickAdd.eventDateHint') }}</p>
+      </div>
+
+      <div>
+        <p class="field-label">{{ t('quickAdd.contactWhen') }}</p>
+        <FollowUpPicker v-model="contactAt" now-option />
+        <p v-if="contactAt" class="mt-1.5 text-sm text-slate-500">{{ t('quickAdd.contactLaterHint') }}</p>
       </div>
 
       <label class="flex items-center gap-2 text-sm text-slate-700">

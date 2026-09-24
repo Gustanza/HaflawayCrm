@@ -1,10 +1,31 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, watch, onUnmounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth.js'
 
 const auth = useAuthStore()
+const router = useRouter()
 const { t } = useI18n()
+
+// The moment access arrives — the background claims refresh, or "Check again" — move on.
+// Nobody should have to find their own way out of this screen once they are let in.
+watch(
+  () => auth.canUseApp,
+  (ok) => {
+    if (ok) router.replace({ name: 'work-queue' })
+  },
+  { immediate: true },
+)
+
+// Access is granted by a server-side trigger moments after registration or an admin's
+// change. Check quietly for a couple of minutes so the user is not left pressing a button.
+let polls = 0
+const poll = setInterval(() => {
+  if (auth.canUseApp || ++polls > 24) return clearInterval(poll)
+  auth.refreshClaims()
+}, 5000)
+onUnmounted(() => clearInterval(poll))
 
 const checking = ref(false)
 const lastChecked = ref(null)

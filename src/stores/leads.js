@@ -91,6 +91,18 @@ export const useLeadsStore = defineStore('leads', () => {
     return dealsService.deleteDeal({ leadId, dealId })
   }
 
+  /**
+   * Record "they took it" / "they said no" for a product, straight from the Log dialog.
+   * Closes the lead's open deal for that product, or — when the product was never added —
+   * creates the deal and closes it, so a sale is never lost for want of a setup step.
+   * Uses the same addDeal/closeDeal writes as the Lead Detail screen, so the same rules apply.
+   */
+  async function recordDealOutcome({ leadId, openDeals, productType, status, lostReason = null }) {
+    const existing = openDeals.find((d) => d.productType === productType && d.status === 'open')
+    const dealId = existing?.id ?? (await addDeal(leadId, auth.orgId, productType))
+    await closeDeal(leadId, dealId, status, lostReason)
+  }
+
   async function logActivity({ leadId, channel, outcome, summary, dealId, nextFollowUpAt }) {
     return activitiesService.logActivity({
       leadId, channel, outcome, summary, dealId, nextFollowUpAt, user: actingUser(auth),
@@ -113,7 +125,7 @@ export const useLeadsStore = defineStore('leads', () => {
     workQueue, leadList, lead, deals, timeline,
     createLead, updateLead, reassignLead, deleteLead,
     addDeal, closeDeal, reopenDeal, deleteDeal,
-    logActivity, voidActivity, setNextFollowUp,
+    logActivity, voidActivity, setNextFollowUp, recordDealOutcome,
     checkPhoneAvailable,
   }
 })

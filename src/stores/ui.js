@@ -10,8 +10,15 @@
  * attached interface — a dead EDGE bar in a wedding hall, or a captive-portal Wi-Fi that
  * has not been logged into. It is a useful NEGATIVE signal (false really does mean
  * offline) and an unreliable positive one. The authoritative source is Firestore's own
- * snapshot metadata, which is why `reportFromCache()` exists: any live listener should
- * feed `snapshot.metadata.fromCache` into it, and that outranks navigator.onLine.
+ * snapshot metadata, which is why `reportSnapshot()` exists: any live listener should
+ * feed its snapshots into it, and that outranks navigator.onLine.
+ *
+ * But `fromCache` is NOT an offline signal on its own. Every live listener opens with a
+ * cached snapshot and only then hears from the server — normally a few hundred ms later.
+ * Treating that first snapshot as "offline" flashed the banner on every screen, and a
+ * listener that errored or unmounted before the server answered latched it on for good.
+ * So each listener is tracked separately, a cached snapshot only counts once it has gone
+ * unanswered for CACHE_GRACE_MS, and any server-served snapshot proves we are connected.
  */
 
 import { defineStore } from 'pinia'
@@ -19,6 +26,10 @@ import { ref, computed, readonly } from 'vue'
 import i18n from '@/i18n.js'
 
 let nextToastId = 0
+let nextSourceId = 0
+
+/** Firestore itself gives up on the backend after ~10 s; matching it avoids false alarms. */
+const CACHE_GRACE_MS = 10_000
 
 /**
  * Firestore error codes → locale keys.
@@ -48,8 +59,10 @@ export function writeErrorKey(error) {
 
 export const useUiStore = defineStore('ui', () => {
   const toasts = ref([])
-  const browserOnline = ref(typeof navigator === 'undefined' ? true : navigator.onLine)
-  const firestoreServed = ref(true) // last snapshot came from the server, not the cache
+  const browserOnline = ref(typeof navigator === 'undefined' || navigator.onLine !== false)
+  // Listeners whose cached snapshot has gone unanswered by the server past the grace period.
+  const staleSources = ref(new Set())
+  const graceTimers = new Map()
   const pendingWrites = ref(0)
   const sidebarOpen = ref(false)
   const justReconnected = ref(false)
@@ -59,21 +72,61 @@ export const useUiStore = defineStore('ui', () => {
    * instantly; Firestore's cache flag catches the connected-but-useless cases the browser
    * flag misses.
    */
-  const isOnline = computed(() => browserOnline.value && firestoreServed.value)
+  const isOnline = computed(() => browserOnline.value && staleSources.value.size === 0)
   const hasPendingWrites = computed(() => pendingWrites.value > 0)
 
+  function clearSource(source) {
+    clearTimeout(graceTimers.get(source))
+    graceTimers.delete(source)
+    if (staleSources.value.has(source)) {
+      const next = new Set(staleSources.value)
+      next.delete(source)
+      staleSources.value = next
+    }
+  }
+
+  function clearAllSources() {
+    for (const timer of graceTimers.values()) clearTimeout(timer)
+    graceTimers.clear()
+    if (staleSources.value.size) staleSources.value = new Set()
+  }
+
   /**
-   * Feed Firestore snapshot metadata in from any live listener:
-   *   onSnapshot(q, (snap) => ui.reportSnapshot(snap))
+   * Feed Firestore snapshot metadata in from any listener:
+   *   const source = ui.connectivitySource()
+   *   onSnapshot(q, { includeMetadataChanges: true }, (snap) => ui.reportSnapshot(snap, source))
+   *   ...and ui.releaseSource(source) when that listener stops or errors.
+   *
+   * One-shot reads can omit `source`; they share a single slot.
    */
-  function reportSnapshot(snapshot) {
+  function reportSnapshot(snapshot, source = 'one-shot') {
     const meta = snapshot?.metadata
     if (!meta) return
-    firestoreServed.value = !meta.fromCache
+    if (!meta.fromCache) {
+      // A server answer from ANY listener proves the connection is up.
+      clearAllSources()
+      return
+    }
+    if (graceTimers.has(source) || staleSources.value.has(source)) return
+    graceTimers.set(
+      source,
+      setTimeout(() => {
+        graceTimers.delete(source)
+        staleSources.value = new Set(staleSources.value).add(source)
+      }, CACHE_GRACE_MS),
+    )
     // NOTE: `hasPendingWrites` is PER-QUERY metadata, not a global truth. Using it to set
     // the counter let an unrelated snapshot (say the profile listener) report "nothing
     // queued" while three lead writes were still waiting. trackWrite() owns the counter.
   }
+
+  /** A token identifying one live listener to reportSnapshot(). */
+  function connectivitySource() {
+    return `listener-${++nextSourceId}`
+  }
+
+  /** The listener stopped or errored — its last cached snapshot no longer says anything. */
+  const releaseSource = clearSource
 
   /* ------------------------------------------------------------------- toasts */
 
@@ -144,13 +197,13 @@ export const useUiStore = defineStore('ui', () => {
 
     const goOnline = () => {
       browserOnline.value = true
-      // Clear the Firestore-side flag too. Without this, `firestoreServed` could only ever
+      // Clear the Firestore-side flag too. Without this, the Firestore-side flag could only ever
       // be set FALSE, so after a single signal drop `isOnline` latched false for the whole
       // session: the agent walked back into 4G and the app still said "Huna mtandao".
       // A false negative is worse than the false positive it replaced — an agent who
       // stops trusting the indicator stops trusting that their notes were saved.
       // The next snapshot corrects this if we are wrong.
-      firestoreServed.value = true
+      clearAllSources()
       justReconnected.value = true
       setTimeout(() => {
         justReconnected.value = false
@@ -158,7 +211,6 @@ export const useUiStore = defineStore('ui', () => {
     }
     const goOffline = () => {
       browserOnline.value = false
-      firestoreServed.value = false
     }
 
     window.addEventListener('online', goOnline)
@@ -181,6 +233,6 @@ export const useUiStore = defineStore('ui', () => {
     hasPendingWrites,
     sidebarOpen,
     toast, success, info, warn, error, dismiss, clearToasts,
-    trackWrite, reportSnapshot, bindConnectivity, toggleSidebar,
+    trackWrite, reportSnapshot, connectivitySource, releaseSource, bindConnectivity, toggleSidebar,
   }
 })

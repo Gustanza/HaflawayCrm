@@ -5,6 +5,8 @@ import { QUICK_CHIPS, resolveQuickChip } from '@/domain/followUp.js'
 
 const props = defineProps({
   modelValue: { type: Date, default: null },
+  /** Offer a leading "Now" chip that stands for `null` — the New Lead form's default. */
+  nowOption: { type: Boolean, default: false },
 })
 const emit = defineEmits(['update:modelValue'])
 const { t } = useI18n()
@@ -47,6 +49,16 @@ function pickChip(chip) {
   emit('update:modelValue', resolved)
 }
 
+const nowSelected = computed(
+  () => props.nowOption && !props.modelValue && !selectedChip.value && !showCustom.value,
+)
+
+function pickNow() {
+  selectedChip.value = null
+  showCustom.value = false
+  emit('update:modelValue', null)
+}
+
 function pickCustom() {
   showCustom.value = true
   selectedChip.value = null
@@ -56,6 +68,19 @@ function pickCustom() {
 <template>
   <div>
     <div class="flex flex-wrap gap-2">
+      <button
+        v-if="nowOption"
+        type="button"
+        class="rounded-full px-3.5 py-2 text-sm font-medium ring-1 ring-inset transition-colors"
+        style="min-height: var(--spacing-touch)"
+        :class="nowSelected
+          ? 'bg-brand-600 text-white ring-brand-600'
+          : 'bg-white text-slate-700 ring-slate-300 hover:bg-slate-50'"
+        :aria-pressed="nowSelected"
+        @click="pickNow"
+      >
+        {{ t('snooze.now') }}
+      </button>
       <button
         v-for="chip in QUICK_CHIPS"
         :key="chip"

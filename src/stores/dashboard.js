@@ -1,116 +1,170 @@
 /**
- * The owner/manager dashboard — TODO.md §1/§5 screen 6.
+ * The Dashboard — progress for a day, week, month or quarter. TODO.md §1/§5 screen 6.
  *
- * "We called 100 people today, 10 started working with us, 5 reminders, 3 contribution
- * cards, 1 committee invite, 1 event invitation" — for whichever period (day/week/month/
- * quarter) is selected. This is a manager/admin screen; the underlying collection-group
- * queries are rejected by firestore.rules for anyone else (see queries.js).
+ * "I tried 18 people this week, reached 10, closed 4 — two reminders, one invitation card,
+ * one committee invite — and here is who took what, and when their event is."
  *
- * Not real-time and not rolled up — at this scale a handful of one-shot queries per period
- * switch is cheap and simple. Revisit with precomputed rollup docs only if this is ever
- * measurably slow (TODO.md §11.3's own "load-bearing" cost discipline still applies, just not
- * urgently at this volume).
+ * One fetch covers BOTH the selected period and the one before it, so every headline number
+ * can show its ▲▼ change without a second round trip. All the arithmetic lives in
+ * domain/progress.js, which is pure and unit-tested; this store only fetches and maps.
+ *
+ * Manager/admin only: the collection-group reads are rejected by firestore.rules for anyone
+ * else (see queries.js). Not real-time — a handful of one-shot reads per period switch is
+ * cheap at this scale. Revisit with precomputed daily rollups if it ever gets slow.
  */
 
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
-import { getDocs } from 'firebase/firestore'
+import { ref, computed, shallowRef } from 'vue'
+import { getDocs, getDoc, doc } from 'firebase/firestore'
+import { getDb } from '@/firebase/app.js'
 import { useAuthStore } from '@/stores/auth.js'
-import { dayKey, weekKey, monthKey, quarterKey } from '@/domain/periods.js'
-import { PRODUCT_TYPES, LOST_REASONS } from '@/domain/taxonomies.js'
+import { dayKey } from '@/domain/periods.js'
 import {
-  leadsCreatedInPeriodQuery,
-  activitiesInPeriodQuery,
-  dealsClosedInPeriodQuery,
+  PERIODS, periodRange, previousPeriodRange, periodBuckets,
+  summarise, bucketSeries, bySalesperson, pitchNext,
+  firstContactStats, waitingForFirstContact,
+} from '@/domain/progress.js'
+import {
+  activitiesInDayRangeQuery,
+  leadsCreatedInDayRangeQuery,
+  dealsClosedInDayRangeQuery,
+  leadDealsQuery,
+  neverContactedLeadsQuery,
   upcomingEventsQuery,
   hotLeadsQuery,
 } from '@/services/queries.js'
 
-export const PERIODS = Object.freeze(['day', 'week', 'month', 'quarter'])
+/** How far back "they bought something" counts for the pitch-the-next list. */
+const PITCH_LOOKBACK_DAYS = 365
+/** Caps on per-lead follow-up reads, so a busy quarter cannot fan out into hundreds. */
+const MAX_CLOSED_LISTED = 50
+const MAX_PITCH_LEADS = 60
 
-const PERIOD_FIELD = Object.freeze({
-  day: 'dayKey',
-  week: 'weekKey',
-  month: 'monthKey',
-  quarter: 'quarterKey',
-})
+const parentLeadId = (snap) => snap.ref.parent.parent?.id ?? null
 
-const PERIOD_KEY_FN = Object.freeze({
-  day: dayKey,
-  week: weekKey,
-  month: monthKey,
-  quarter: quarterKey,
-})
-
-function zeroCountsByType(types) {
-  return Object.fromEntries(types.map((t) => [t, 0]))
+function mapActivity(snap) {
+  const a = snap.data()
+  return { leadId: parentLeadId(snap), dayKey: a.dayKey, at: a.at, outcome: a.outcome, byUserId: a.byUserId, isVoided: a.isVoided === true }
 }
 
-function countBy(docs, field) {
-  const counts = {}
-  for (const d of docs) {
-    const key = d.data()[field]
-    counts[key] = (counts[key] ?? 0) + 1
-  }
-  return counts
+function mapDeal(snap) {
+  return { id: snap.id, leadId: parentLeadId(snap), ...snap.data() }
 }
 
 export const useDashboardStore = defineStore('dashboard', () => {
   const auth = useAuthStore()
 
-  const period = ref('day')
-  const now = ref(new Date())
+  const period = ref('week')
+  const range = ref(periodRange('week'))
+  const previousRange = ref(previousPeriodRange('week'))
 
-  const periodValue = computed(() => PERIOD_KEY_FN[period.value](now.value))
-
-  const leadsCreated = ref(0)
-  const contactsMade = ref(0)
-  const closedWonByProduct = ref(zeroCountsByType(PRODUCT_TYPES))
-  const lostByReason = ref(zeroCountsByType(LOST_REASONS))
-  const upcomingEvents = ref([])
-  const hotLeads = ref([])
+  const current = shallowRef(null)
+  const previous = shallowRef(null)
+  const series = shallowRef([])
+  const people = shallowRef([])
+  /** [{ deal, lead, openProducts }] — deals won in the period, newest first. */
+  const closedDeals = shallowRef([])
+  /** [{ lead, taken, inProgress, notYet, eventDay }] */
+  const pitchList = shallowRef([])
+  const upcomingEvents = shallowRef([])
+  const hotLeads = shallowRef([])
+  /** { waiting, pastWindow, current: { contacted, avgMs }, previous: { contacted, avgMs } } */
+  const speed = shallowRef(null)
 
   const loading = ref(false)
   const error = ref(null)
   const loaded = ref(false)
 
-  const totalClosedWon = computed(() =>
-    Object.values(closedWonByProduct.value).reduce((a, b) => a + b, 0),
-  )
+  const hasChart = computed(() => series.value.length > 1)
+
+  let loadSeq = 0
 
   async function load() {
+    const seq = ++loadSeq
     loading.value = true
     error.value = null
-    now.value = new Date()
 
     try {
+      const now = new Date()
       const user = { uid: auth.uid, orgId: auth.orgId, teamId: auth.teamId, role: auth.role }
-      const periodField = PERIOD_FIELD[period.value]
-      const value = periodValue.value
+      const cur = periodRange(period.value, now)
+      const prev = previousPeriodRange(period.value, now)
+      const span = { start: prev.start, end: cur.end }
+      const lookbackStart = dayKey(new Date(now.getTime() - PITCH_LOOKBACK_DAYS * 24 * 60 * 60 * 1000))
+      const today = dayKey(now)
 
-      const eventWindowStart = new Date()
-      const eventWindowEnd = new Date(eventWindowStart.getTime() + 30 * 24 * 60 * 60 * 1000)
+      const eventWindowEnd = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000)
 
-      const [createdSnap, activitySnap, wonSnap, lostSnap, eventsSnap, hotSnap] = await Promise.all([
-        getDocs(await leadsCreatedInPeriodQuery(user, { periodField, periodValue: value })),
-        getDocs(await activitiesInPeriodQuery(user, { periodField, periodValue: value })),
-        getDocs(await dealsClosedInPeriodQuery(user, { status: 'closed_won', periodField, periodValue: value })),
-        getDocs(await dealsClosedInPeriodQuery(user, { status: 'closed_lost', periodField, periodValue: value })),
-        getDocs(await upcomingEventsQuery(user, { start: eventWindowStart, end: eventWindowEnd })),
+      const [activitySnap, leadSnap, wonSnap, lostSnap, recentWinsSnap, eventsSnap, hotSnap, waitingSnap] = await Promise.all([
+        getDocs(await activitiesInDayRangeQuery(user, span)),
+        getDocs(await leadsCreatedInDayRangeQuery(user, span)),
+        getDocs(await dealsClosedInDayRangeQuery(user, { status: 'closed_won', ...span })),
+        getDocs(await dealsClosedInDayRangeQuery(user, { status: 'closed_lost', ...span })),
+        getDocs(await dealsClosedInDayRangeQuery(user, { status: 'closed_won', start: lookbackStart, end: today })),
+        getDocs(await upcomingEventsQuery(user, { start: now, end: eventWindowEnd })),
         getDocs(await hotLeadsQuery(user)),
+        getDocs(await neverContactedLeadsQuery(user)),
       ])
+      if (seq !== loadSeq) return // a newer period switch overtook this one
 
-      leadsCreated.value = createdSnap.size
-      contactsMade.value = activitySnap.size
-      closedWonByProduct.value = { ...zeroCountsByType(PRODUCT_TYPES), ...countBy(wonSnap.docs, 'productType') }
-      lostByReason.value = { ...zeroCountsByType(LOST_REASONS), ...countBy(lostSnap.docs, 'lostReason') }
+      const data = {
+        activities: activitySnap.docs.map(mapActivity),
+        leads: leadSnap.docs.map((s) => ({ id: s.id, ...s.data() })),
+        deals: [...wonSnap.docs, ...lostSnap.docs].map(mapDeal),
+      }
+
+      // The lists need the lead behind each deal (name, event) and that lead's other deals
+      // (what is still open). One read per lead, capped, shared between the two lists.
+      const wonInPeriod = data.deals
+        .filter((d) => d.status === 'closed_won' && d.closedDayKey >= cur.start && d.closedDayKey <= cur.end)
+        .sort((a, b) => (b.closedDayKey ?? '').localeCompare(a.closedDayKey ?? ''))
+        .slice(0, MAX_CLOSED_LISTED)
+      const pitchLeadIds = [...new Set(recentWinsSnap.docs.map(parentLeadId))].slice(0, MAX_PITCH_LEADS)
+      const leadIds = [...new Set([...wonInPeriod.map((d) => d.leadId), ...pitchLeadIds])].filter(Boolean)
+
+      const db = await getDb()
+      const details = await Promise.all(leadIds.map(async (id) => {
+        const [leadDoc, dealsSnap] = await Promise.all([
+          getDoc(doc(db, 'leads', id)),
+          getDocs(await leadDealsQuery(id)),
+        ])
+        return [id, leadDoc.exists() ? { id, ...leadDoc.data() } : null, dealsSnap.docs.map((s) => ({ id: s.id, ...s.data() }))]
+      }))
+      if (seq !== loadSeq) return
+
+      const leadsById = new Map(details.filter(([, l]) => l).map(([id, l]) => [id, l]))
+      const dealsByLead = new Map(details.map(([id, , deals]) => [id, deals]))
+
+      range.value = cur
+      previousRange.value = prev
+      current.value = summarise(data, cur)
+      previous.value = summarise(data, prev)
+      series.value = bucketSeries(data, periodBuckets(period.value, cur))
+      people.value = bySalesperson(data, cur)
+      closedDeals.value = wonInPeriod
+        .filter((d) => leadsById.has(d.leadId))
+        .map((d) => ({
+          deal: d,
+          lead: leadsById.get(d.leadId),
+          openProducts: (dealsByLead.get(d.leadId) ?? []).filter((x) => x.status === 'open').map((x) => x.productType),
+        }))
+      pitchList.value = pitchNext(
+        new Map(pitchLeadIds.map((id) => [id, dealsByLead.get(id) ?? []])),
+        leadsById,
+        now,
+      )
       upcomingEvents.value = eventsSnap.docs.map((d) => ({ id: d.id, ...d.data() }))
       hotLeads.value = hotSnap.docs.map((d) => ({ id: d.id, ...d.data() }))
+      speed.value = {
+        ...waitingForFirstContact(waitingSnap.docs.map((d) => ({ id: d.id, ...d.data() })), now),
+        current: firstContactStats(data, cur),
+        previous: firstContactStats(data, prev),
+      }
       loaded.value = true
     } catch (err) {
-      error.value = err
+      if (seq === loadSeq) error.value = err
     } finally {
-      loading.value = false
+      if (seq === loadSeq) loading.value = false
     }
   }
 
@@ -121,9 +175,9 @@ export const useDashboardStore = defineStore('dashboard', () => {
   }
 
   return {
-    period, periodValue, PERIODS,
-    leadsCreated, contactsMade, closedWonByProduct, totalClosedWon, lostByReason,
-    upcomingEvents, hotLeads,
+    period, PERIODS, range, previousRange,
+    current, previous, series, hasChart, people, closedDeals, pitchList,
+    upcomingEvents, hotLeads, speed,
     loading, error, loaded,
     load, setPeriod,
   }

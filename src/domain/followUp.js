@@ -80,9 +80,80 @@ export function describeFollowUp(nextFollowUpAt, now = new Date()) {
     return { key: 'overdueNow', count: 0 }
   }
 
-  if (absDays >= 1) return { key: 'dueDays', count: absDays }
-  if (absHours >= 1) return { key: 'dueHours', count: absHours }
-  return { key: 'dueMinutes', count: Math.max(absMinutes, 1) }
+  // Future times ROUND rather than floor. Flooring made "remind me in 2 hours" read back as
+  // "in 1h" a second after saving, which looks like the reminder was not taken.
+  const minutesAhead = Math.ceil(diffMs / 60000)
+  const hoursAhead = Math.round(minutesAhead / 60)
+  const daysAhead = Math.round(minutesAhead / (60 * 24))
+
+  if (hoursAhead >= 24) return { key: 'dueDays', count: Math.max(daysAhead, 1) }
+  if (minutesAhead >= 60) return { key: 'dueHours', count: hoursAhead }
+  return { key: 'dueMinutes', count: Math.max(minutesAhead, 1) }
+}
+
+/* --------------------------------------------------------------- never-contacted leads */
+
+/**
+ * How long a brand-new lead is "New" before it counts as overdue. A lead that has just been
+ * added is not late — it is the most promising contact in the book — but one nobody has
+ * tried in a day has been dropped, and the queue should say so.
+ */
+export const NEW_LEAD_WINDOW_MS = 24 * 60 * 60 * 1000
+
+/** No contact of any kind has been logged — answered or not, every attempt counts. */
+export function isNeverContacted(lead) {
+  return Boolean(lead) && !lead.lastActivityAt
+}
+
+/**
+ * When a never-contacted lead became due: its scheduled first contact (the moment it was
+ * added, when "Now" was picked), falling back to creation time for older documents.
+ */
+function firstContactDue(lead, current) {
+  return toDate(lead.nextFollowUpAt) ?? toDate(lead.createdAt) ?? current
+}
+
+/**
+ * The Work Queue section for a whole LEAD — 'new' | 'overdue' | 'today' | 'upcoming' | null.
+ * Use this, not queueBucket(), wherever a lead is shown: it knows that a lead nobody has
+ * contacted yet is New for its first 24 hours, not overdue from its first second.
+ */
+export function leadBucket(lead, now = new Date()) {
+  const current = toDate(now)
+  if (!lead || !current) return null
+  if (!isNeverContacted(lead)) return queueBucket(lead.nextFollowUpAt, current)
+
+  const due = firstContactDue(lead, current)
+  // Scheduled for later ("call me tomorrow") — an ordinary upcoming follow-up until then.
+  if (due.getTime() > current.getTime()) return queueBucket(due, current)
+  return current.getTime() - due.getTime() < NEW_LEAD_WINDOW_MS ? 'new' : 'overdue'
+}
+
+/**
+ * The badge text for a whole lead, as an i18n key + params. Never-contacted leads say how
+ * long they have been waiting ("New · added 10 min ago", "Not contacted · 3 days");
+ * everything else falls through to describeFollowUp().
+ */
+export function describeLead(lead, now = new Date()) {
+  const current = toDate(now)
+  if (!lead || !current) return null
+  if (!isNeverContacted(lead)) return describeFollowUp(lead.nextFollowUpAt, current)
+
+  const due = firstContactDue(lead, current)
+  if (due.getTime() > current.getTime()) return describeFollowUp(due, current)
+
+  const waitingSince = toDate(lead.createdAt) ?? due
+  const minutes = Math.max(0, Math.floor((current.getTime() - waitingSince.getTime()) / 60000))
+  const hours = Math.floor(minutes / 60)
+  const days = Math.floor(hours / 24)
+
+  if (current.getTime() - due.getTime() < NEW_LEAD_WINDOW_MS) {
+    if (minutes < 1) return { key: 'newJustNow', count: 0 }
+    if (hours < 1) return { key: 'newMinutes', count: minutes }
+    return { key: 'newHours', count: hours }
+  }
+  if (days >= 1) return { key: 'notContactedDays', count: days }
+  return { key: 'notContactedHours', count: Math.max(hours, 1) }
 }
 
 /**

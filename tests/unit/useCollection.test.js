@@ -10,7 +10,7 @@ import { getDocs, onSnapshot } from 'firebase/firestore'
 import { useCollection } from '../../src/composables/useCollection.js'
 
 vi.mock('@/stores/ui.js', () => ({
-  useUiStore: () => ({ reportSnapshot: vi.fn() }),
+  useUiStore: () => ({ reportSnapshot: vi.fn(), connectivitySource: () => 'test', releaseSource: vi.fn() }),
 }))
 
 vi.mock('firebase/firestore', () => ({

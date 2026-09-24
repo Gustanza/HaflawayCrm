@@ -54,6 +54,11 @@ export const useAuthStore = defineStore('auth', () => {
   const errorKey = ref(null)
 
   let stopProfileListener = null
+  let initPromise = null
+  // The in-flight application of the latest auth state. Navigation awaits it so the router
+  // never sees a half-applied session: signed in, but with no claims read yet.
+  let settling = Promise.resolve()
+  let authSeq = 0
 
   /* ---------------------------------------------------------------- getters */
 
@@ -117,7 +122,8 @@ export const useAuthStore = defineStore('auth', () => {
     if (cancelled || user.value?.uid !== currentUid) return
 
     const ui = useUiStore()
-    const unsubscribe = onSnapshot(
+    const source = ui.connectivitySource()
+    const unsubscribeSnapshot = onSnapshot(
       doc(db, 'users', currentUid),
       { includeMetadataChanges: true },
       (snap) => {
@@ -125,43 +131,87 @@ export const useAuthStore = defineStore('auth', () => {
         // session, which makes it the right place to sample real connectivity. Without a
         // caller, `reportSnapshot` was dead code and `firestoreServed` could only ever be
         // set false — the banner latched on "offline" for the rest of the session.
-        ui.reportSnapshot(snap)
+        ui.reportSnapshot(snap, source)
         profile.value = snap.exists() ? { id: snap.id, ...snap.data() } : null
       },
       () => {
         // An unprovisioned user cannot read their own document yet. Not an error worth
         // showing — `isProvisioned` already routes them to the waiting screen.
+        ui.releaseSource(source)
         profile.value = null
       },
     )
-    stopProfileListener = unsubscribe
+    stopProfileListener = () => {
+      unsubscribeSnapshot()
+      ui.releaseSource(source)
+    }
+  }
+
+  const claimsGrantAccess = (c) =>
+    ROLES.includes(c?.role) && Boolean(c?.orgId?.trim()) && c?.active === true
+
+  /**
+   * Read the claims, fast when possible and NEVER depending on the network.
+   *
+   * The cached token is used when it already grants access — that is instant, and blocking
+   * on a forced refresh here is part of what left a freshly signed-in user looking
+   * "unprovisioned". Only when the cached claims fall short do we pay for a server refresh
+   * (a role granted seconds ago). Offline that refresh fails, and the cached token — which
+   * Firebase persists and which is what the SDK would send anyway — is good enough.
+   */
+  async function readClaims(fbUser) {
+    const fallback = user.value?.uid === fbUser.uid ? claims.value : null
+    let cached = null
+    try {
+      cached = (await fbUser.getIdTokenResult(false)).claims
+    } catch {
+      /* fall through to a refresh */
+    }
+    if (claimsGrantAccess(cached)) return cached
+    try {
+      return (await fbUser.getIdTokenResult(true)).claims
+    } catch {
+      // Keep whatever we already had rather than downgrading a working session to
+      // "unprovisioned" because the phone lost signal.
+      return cached ?? fallback
+    }
   }
 
   /**
-   * Read the claims, preferring a fresh token but NEVER depending on the network.
-   *
-   * A forced refresh is an online-only optimisation: it lets a role granted seconds ago
-   * take effect without signing out. Offline it rejects with auth/network-request-failed,
-   * and the cached token — which Firebase persists and which is what the SDK would send
-   * anyway — is entirely good enough.
+   * Pick up role changes made since the cached token was issued, without blocking anything.
+   * Silent on failure: this is a background top-up, not something the user asked for.
    */
-  async function readClaims(fbUser, { forceRefresh = true } = {}) {
+  async function refreshClaimsQuietly(fbUser) {
     try {
-      const token = await fbUser.getIdTokenResult(forceRefresh)
-      return token.claims
-    } catch (error) {
-      if (forceRefresh) {
-        try {
-          const cached = await fbUser.getIdTokenResult(false)
-          return cached.claims
-        } catch {
-          /* fall through */
-        }
-      }
-      // Keep whatever we already had rather than downgrading a working session to
-      // "unprovisioned" because the phone lost signal.
-      return claims.value
+      const fresh = (await fbUser.getIdTokenResult(true)).claims
+      if (user.value?.uid === fbUser.uid) claims.value = fresh
+    } catch {
+      /* offline — the cached claims stand */
     }
+  }
+
+  /**
+   * Apply an auth state. `user` and `claims` are set TOGETHER, after the claims are read:
+   * setting the user first let the router see "signed in, no role" mid-login and bounce a
+   * perfectly good account to the no-access screen.
+   */
+  async function applyAuthUser(fbUser) {
+    const seq = ++authSeq
+    if (!fbUser) {
+      stopProfileListener?.()
+      stopProfileListener = null
+      user.value = null
+      claims.value = null
+      profile.value = null
+      return
+    }
+    const nextClaims = await readClaims(fbUser)
+    if (seq !== authSeq) return // a newer sign-in or sign-out overtook this one
+    const changedUser = user.value?.uid !== fbUser.uid
+    claims.value = nextClaims
+    user.value = fbUser
+    if (changedUser || !stopProfileListener) watchProfile(fbUser.uid)
+    refreshClaimsQuietly(fbUser)
   }
 
   /**
@@ -171,43 +221,50 @@ export const useAuthStore = defineStore('auth', () => {
    * the whole app hangs on a spinner with no route ever rendering (TODO.md P7, P8).
    */
   function init() {
-    return new Promise((resolve) => {
+    if (initPromise) return initPromise
+    initPromise = new Promise((resolve) => {
+      let resolved = false
+      const finish = () => {
+        if (resolved) return
+        resolved = true
+        // Whatever happened, the app must become navigable.
+        initialising.value = false
+        resolve(user.value)
+      }
       onAuthStateChanged(
         auth,
-        async (fbUser) => {
-          try {
-            if (fbUser) {
-              user.value = fbUser
-              claims.value = await readClaims(fbUser)
-              watchProfile(fbUser.uid)
-            } else {
-              user.value = null
-              claims.value = null
-              profile.value = null
-              stopProfileListener?.()
-              stopProfileListener = null
-            }
-          } finally {
-            // Whatever happened above, the app must become navigable.
-            initialising.value = false
-            resolve(user.value)
-          }
+        (fbUser) => {
+          settling = applyAuthUser(fbUser).catch(() => {}).finally(finish)
         },
-        () => {
-          // The observer itself errored. Still let the app boot — the router will send an
-          // unauthenticated user to /login, which is a screen, not a spinner.
-          initialising.value = false
-          resolve(null)
-        },
+        // The observer itself errored. Still let the app boot — the router will send an
+        // unauthenticated user to /login, which is a screen, not a spinner.
+        finish,
       )
     })
+    return initPromise
+  }
+
+  /** Wait until the latest auth state has been fully applied. Cheap once settled. */
+  async function ready() {
+    await init()
+    await settling
+  }
+
+  /** After a sign-in: make sure THIS user is applied before anyone navigates. */
+  async function settleFor(fbUser) {
+    await settling
+    if (user.value?.uid !== fbUser.uid) {
+      settling = applyAuthUser(fbUser).catch(() => {})
+      await settling
+    }
   }
 
   async function signIn(email, password) {
     busy.value = true
     errorKey.value = null
     try {
-      await signInWithEmailAndPassword(auth, email.trim(), password)
+      const credential = await signInWithEmailAndPassword(auth, email.trim(), password)
+      await settleFor(credential.user)
       return true
     } catch (error) {
       errorKey.value = authErrorKey(error)
@@ -226,7 +283,8 @@ export const useAuthStore = defineStore('auth', () => {
     busy.value = true
     errorKey.value = null
     try {
-      await createUserWithEmailAndPassword(auth, email.trim(), password)
+      const credential = await createUserWithEmailAndPassword(auth, email.trim(), password)
+      await settleFor(credential.user)
       return true
     } catch (error) {
       errorKey.value = authErrorKey(error)
@@ -237,6 +295,7 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   async function signOut() {
+    authSeq++ // cancel any sign-in still reading its claims
     stopProfileListener?.()
     stopProfileListener = null
     await fbSignOut(auth)
@@ -306,7 +365,7 @@ export const useAuthStore = defineStore('auth', () => {
     user, claims, profile, initialising, busy, errorKey,
     isSignedIn, uid, role, teamId, orgId, isProvisioned, isActive, canUseApp,
     displayName, isAdmin, isManager, isAgent, can,
-    init, signIn, registerAccount, signOut, resetPassword, changePassword, refreshClaims,
+    init, ready, signIn, registerAccount, signOut, resetPassword, changePassword, refreshClaims,
     clearError,
   }
 })

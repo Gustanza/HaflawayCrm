@@ -56,6 +56,12 @@
     @apply outline-2 outline-offset-2 outline-brand-500;
   }
 
+  /* Nothing that is not a control should ever show a focus box — not a heading, not the
+     page body, not a card someone clicked. Only buttons, links and inputs get an outline. */
+  :where(h1, h2, h3, h4, p, div, main, section, article, header, nav, aside, span):focus {
+    outline: none;
+  }
+
   /* Stop iOS Safari zooming the page when a text input is focused: it happens
      whenever the font-size is under 16px, and it makes the quick-add form unusable. */
   input,
@@ -73,7 +79,8 @@
   .btn-primary,
   .btn-secondary,
   .btn-ghost,
-  .btn-danger {
+  .btn-danger,
+  .btn-whatsapp {
     @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 font-medium
            transition-colors select-none disabled:opacity-50 disabled:pointer-events-none;
     min-height: var(--spacing-touch);
@@ -193,6 +200,65 @@
            hover:bg-slate-100 hover:text-slate-900 disabled:opacity-50 disabled:pointer-events-none;
     width: var(--spacing-touch);
     height: var(--spacing-touch);
+  }
+
+  /* WhatsApp is a primary field action. Emerald-800 / white clears 4.5:1; the official
+     WhatsApp green does not. Colour still isn't the only signal — the control has a label. */
+  .btn-whatsapp {
+    @apply bg-emerald-800 text-white hover:bg-emerald-900 active:bg-emerald-950;
+  }
+
+  /* Lead directory cards — depth without competing with urgency colour. */
+  .lead-card {
+    @apply relative min-w-0 cursor-pointer rounded-2xl bg-white ring-1 ring-slate-200;
+    box-shadow: 0 1px 2px rgb(15 23 42 / 0.05);
+    transition: box-shadow 200ms ease-out, transform 200ms ease-out;
+  }
+  .lead-card:hover,
+  .lead-card:focus-within {
+    @apply ring-slate-300;
+    box-shadow: 0 10px 28px rgb(15 23 42 / 0.1);
+    transform: translateY(-2px);
+  }
+
+  .lead-card-enter {
+    animation: lead-card-in 280ms ease-out both;
+  }
+
+  .stat-chip {
+    @apply flex flex-col items-center justify-center rounded-2xl bg-white px-2 py-2.5 text-center
+           ring-1 ring-slate-200 transition-colors;
+    min-height: 4.25rem;
+  }
+  .stat-chip:hover:not([aria-pressed='true']) {
+    @apply bg-slate-50;
+  }
+
+  .page-shell {
+    @apply mx-auto w-full max-w-2xl px-4 py-6 sm:px-6 lg:max-w-5xl lg:py-8;
+  }
+
+  .page-title {
+    @apply text-2xl font-semibold tracking-tight text-slate-900;
+  }
+
+  .section-label {
+    @apply text-sm font-semibold uppercase tracking-wide text-slate-500;
+  }
+
+  .meter-track {
+    @apply mt-1.5 h-2 overflow-hidden rounded-full bg-slate-100;
+  }
+}
+
+@keyframes lead-card-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
   }
 }
 

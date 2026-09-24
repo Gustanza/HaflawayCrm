@@ -47,6 +47,7 @@ export function useCollection(
   const hasMore = ref(false)
 
   const ui = useUiStore()
+  const source = ui.connectivitySource()
   let unsubscribe = null
   // The raw last doc from the most recent fetch — a cursor, never exposed via `items`
   // (which stays the mapped `{id, ...data}` shape every caller already expects).
@@ -55,9 +56,24 @@ export function useCollection(
   /** True only once we know there is genuinely nothing — not while still loading. */
   const isEmpty = computed(() => loaded.value && items.value.length === 0)
 
+  // A live listener that fails (an index still building, a blip in the connection) is
+  // retried on its own, so the screen heals without anyone pressing "Try again".
+  const RETRY_MS = 30_000
+  let retryTimer = null
+  let disposed = false
+
+  function scheduleRetry() {
+    if (disposed || retryTimer) return
+    retryTimer = setTimeout(() => {
+      retryTimer = null
+      if (!disposed) load()
+    }, RETRY_MS)
+  }
+
   function stop() {
     unsubscribe?.()
     unsubscribe = null
+    ui.releaseSource(source)
   }
 
   /** An exact-cap fetch means there might be more — Firestore has no cheap total count. */
@@ -66,6 +82,8 @@ export function useCollection(
   }
 
   async function load() {
+    clearTimeout(retryTimer)
+    retryTimer = null
     loading.value = true
     error.value = null
     lastDoc = null
@@ -88,7 +106,7 @@ export function useCollection(
             q,
             { includeMetadataChanges: true },
             (snap) => {
-              ui.reportSnapshot(snap)
+              ui.reportSnapshot(snap, source)
               fromCache.value = snap.metadata.fromCache
               items.value = snap.docs.map(map)
               // Meaningful even though loadMore() refuses to run on a live query (see
@@ -104,8 +122,14 @@ export function useCollection(
               }
             },
             (err) => {
+              ui.releaseSource(source)
               error.value = err
               loading.value = false
+              // After the first snapshot nobody awaits this promise any more, so without
+              // logging here a listener that dies (a missing index, say) fails in total
+              // silence while the screen keeps showing its cached copy.
+              if (settled) console.error('[useCollection live]', err) // eslint-disable-line no-console
+              scheduleRetry()
               if (!settled) {
                 settled = true
                 reject(err)
@@ -163,7 +187,11 @@ export function useCollection(
   }
 
   // Enforced here so no component can forget it (§11.3).
-  onUnmounted(stop)
+  onUnmounted(() => {
+    disposed = true
+    clearTimeout(retryTimer)
+    stop()
+  })
 
   if (immediate) load()
 
@@ -181,11 +209,13 @@ export function useDoc(buildRef, { live = true, immediate = true } = {}) {
   const loaded = ref(false)
 
   const ui = useUiStore()
+  const source = ui.connectivitySource()
   let unsubscribe = null
 
   function stop() {
     unsubscribe?.()
     unsubscribe = null
+    ui.releaseSource(source)
   }
 
   async function load() {
@@ -206,12 +236,13 @@ export function useDoc(buildRef, { live = true, immediate = true } = {}) {
           reference,
           { includeMetadataChanges: true },
           (snap) => {
-            ui.reportSnapshot(snap)
+            ui.reportSnapshot(snap, source)
             item.value = snap.exists() ? withId(snap) : null
             loaded.value = true
             loading.value = false
           },
           (err) => {
+            ui.releaseSource(source)
             error.value = err
             loading.value = false
           },

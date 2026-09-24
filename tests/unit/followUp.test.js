@@ -4,6 +4,9 @@ import {
   queueBucket,
   describeFollowUp,
   sortByFollowUp,
+  leadBucket,
+  describeLead,
+  isNeverContacted,
 } from '../../src/domain/followUp.js'
 
 describe('resolveQuickChip', () => {
@@ -75,6 +78,13 @@ describe('describeFollowUp', () => {
     expect(describeFollowUp('2026-08-24T12:05:00+03:00', now)).toEqual({ key: 'dueMinutes', count: 5 })
   })
 
+  it('a quick-pick read back moments later says what was picked, not one less', () => {
+    const later = new Date(now.getTime() + 5000) // the screen re-renders a few seconds on
+    expect(describeFollowUp(resolveQuickChip('2h', now), later)).toEqual({ key: 'dueHours', count: 2 })
+    expect(describeFollowUp(resolveQuickChip('3d', now), later)).toEqual({ key: 'dueDays', count: 3 })
+    expect(describeFollowUp(resolveQuickChip('1w', now), later)).toEqual({ key: 'dueDays', count: 7 })
+  })
+
   it('a follow-up seconds away still reports at least 1 minute, not 0', () => {
     expect(describeFollowUp('2026-08-24T12:00:30+03:00', now)).toEqual({ key: 'dueMinutes', count: 1 })
   })
@@ -107,5 +117,50 @@ describe('sortByFollowUp', () => {
     const copy = [...leads]
     sortByFollowUp(leads, now)
     expect(leads).toEqual(copy)
+  })
+})
+
+describe('never-contacted leads — New for 24 hours, then overdue', () => {
+  const now = new Date('2026-08-24T12:00:00+03:00')
+  const minutesAgo = (m) => new Date(now.getTime() - m * 60000)
+  const newLead = (createdMinutesAgo, extra = {}) => ({
+    createdAt: minutesAgo(createdMinutesAgo),
+    nextFollowUpAt: minutesAgo(createdMinutesAgo), // "Now" = due the moment it was added
+    lastActivityAt: null,
+    ...extra,
+  })
+
+  it('a lead added a moment ago is New, not Overdue', () => {
+    expect(leadBucket(newLead(0), now)).toBe('new')
+    expect(describeLead(newLead(0), now)).toEqual({ key: 'newJustNow', count: 0 })
+    expect(describeLead(newLead(10), now)).toEqual({ key: 'newMinutes', count: 10 })
+    expect(describeLead(newLead(5 * 60), now)).toEqual({ key: 'newHours', count: 5 })
+  })
+
+  it('after 24 hours untouched it turns overdue, and says it was never contacted', () => {
+    expect(leadBucket(newLead(24 * 60), now)).toBe('overdue')
+    expect(describeLead(newLead(26 * 60), now)).toEqual({ key: 'notContactedDays', count: 1 })
+    expect(describeLead(newLead(5 * 24 * 60), now)).toEqual({ key: 'notContactedDays', count: 5 })
+  })
+
+  it('a lead scheduled for later is an ordinary upcoming follow-up until then', () => {
+    const later = newLead(0, { nextFollowUpAt: new Date('2026-08-25T09:00:00+03:00') })
+    expect(leadBucket(later, now)).toBe('upcoming')
+    expect(describeLead(later, now).key).toBe('dueHours')
+    // ...and New from the moment it falls due, not from when it was added.
+    const dueAt = new Date('2026-08-25T09:00:00+03:00')
+    expect(leadBucket(later, new Date(dueAt.getTime() + 60 * 60000))).toBe('new')
+  })
+
+  it('once any contact is logged, the normal follow-up rules apply', () => {
+    const contacted = newLead(5 * 24 * 60, { lastActivityAt: minutesAgo(60), nextFollowUpAt: new Date('2026-08-24T14:00:00+03:00') })
+    expect(isNeverContacted(contacted)).toBe(false)
+    expect(leadBucket(contacted, now)).toBe('today')
+    expect(describeLead(contacted, now)).toEqual({ key: 'dueHours', count: 2 })
+  })
+
+  it('an old lead with no createdAt still works from its follow-up time', () => {
+    expect(leadBucket({ nextFollowUpAt: minutesAgo(30), lastActivityAt: null }, now)).toBe('new')
+    expect(leadBucket(null, now)).toBeNull()
   })
 })

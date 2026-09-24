@@ -5,6 +5,14 @@
       "queryScope": "COLLECTION",
       "fields": [
         { "fieldPath": "orgId", "order": "ASCENDING" },
+        { "fieldPath": "nextFollowUpAt", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "leads",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "orgId", "order": "ASCENDING" },
         { "fieldPath": "ownerId", "order": "ASCENDING" },
         { "fieldPath": "nextFollowUpAt", "order": "ASCENDING" }
       ]
