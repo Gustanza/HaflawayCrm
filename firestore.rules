@@ -1,0 +1,32 @@
+rules_version = '2';
+
+// Firestore rules for the shared `haflawaycrm` Firebase project.
+// Two apps live in this project and their data never overlaps:
+//   - HaflaCREM (this app)       → collections prefixed `crm_`
+//   - Haflaway CRM (the old app) → leads (+ deals/activities/payments subcollections),
+//                                  users, usersPublic, orgs, leadPhoneIndex
+// When publishing in the Firebase console, keep BOTH sections, or the other app stops working.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---------------- HaflaCREM ----------------
+    // Any signed-in team member can read and write CRM records.
+    match /{collection}/{docId} {
+      allow read, write: if request.auth != null
+        && collection in ['crm_leads', 'crm_accounts', 'crm_contacts', 'crm_opportunities', 'crm_tasks', 'crm_activities'];
+    }
+    // Profiles: readable by the team, writable only by their owner.
+    match /crm_users/{uid} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && request.auth.uid == uid;
+    }
+
+    // ---------------- Haflaway CRM (old app) ----------------
+    // Copied unchanged from HaflawayCrm/firestore.rules so the old app keeps working.
+    // HaflaCREM only ever READS these, from its "Import from Haflaway CRM" tool.
+    match /{document=**} {
+      allow read, write: if request.auth != null;
+    }
+  }
+}

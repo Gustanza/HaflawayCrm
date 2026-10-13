@@ -1,0 +1,159 @@
+<script setup>
+import { ref, computed, watch } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
+import Icon from './Icon.vue'
+import ObjectIcon from './ObjectIcon.vue'
+import RecordFormModal from './RecordFormModal.vue'
+import { store, logout } from '../store.js'
+import { NAV_OBJECTS, OBJECTS } from '../meta/objects.js'
+import { searchAll } from '../search.js'
+import { initials } from '../format.js'
+import { useClickOutside } from '../useClickOutside.js'
+
+const router = useRouter()
+const route = useRoute()
+
+const q = ref(route.name === 'search' ? route.query.q || '' : '')
+const focused = ref(false)
+const active = ref(-1)
+const searchEl = ref(null)
+useClickOutside(searchEl, () => (focused.value = false))
+
+const suggestions = computed(() => (q.value.trim().length < 2 ? [] : searchAll(q.value).slice(0, 7)))
+watch(q, () => (active.value = -1))
+
+function go(item) {
+  focused.value = false
+  router.push(`/o/${item.object}/${item.record.id}`)
+}
+function submit() {
+  if (active.value >= 0 && suggestions.value[active.value]) return go(suggestions.value[active.value])
+  if (!q.value.trim()) return
+  focused.value = false
+  router.push({ name: 'search', query: { q: q.value.trim() } })
+}
+function move(d) {
+  const n = suggestions.value.length
+  if (n) active.value = (active.value + d + n) % n
+}
+
+const createOpen = ref(false)
+const createEl = ref(null)
+useClickOutside(createEl, () => (createOpen.value = false))
+const creating = ref(null)
+
+const userOpen = ref(false)
+const userEl = ref(null)
+useClickOutside(userEl, () => (userOpen.value = false))
+
+async function doLogout() {
+  await logout()
+  router.push('/login')
+}
+</script>
+
+<template>
+  <header class="global-header">
+    <RouterLink to="/" class="logo" aria-label="HaflaCREM home">
+      <svg width="40" height="28" viewBox="0 0 40 28" aria-hidden="true">
+        <path d="M11 26a9 9 0 0 1-1.6-17.9A10 10 0 0 1 28.6 6 8 8 0 1 1 31 26z" fill="#0176d3" />
+        <text x="20" y="20" text-anchor="middle" font-size="11" font-weight="700" fill="#fff" font-family="Segoe UI, Arial">HC</text>
+      </svg>
+    </RouterLink>
+
+    <div ref="searchEl" class="search" :class="{ open: focused && q.trim().length >= 2 }">
+      <Icon name="search" class="search-icon" />
+      <input
+        v-model="q" class="search-input" placeholder="Search leads, accounts, contacts, opportunities..."
+        aria-label="Search" @focus="focused = true" @keydown.enter.prevent="submit"
+        @keydown.down.prevent="move(1)" @keydown.up.prevent="move(-1)" @keydown.esc="focused = false"
+      />
+      <div v-if="focused && q.trim().length >= 2" class="search-menu">
+        <button
+          v-for="(s, i) in suggestions" :key="s.object + s.record.id" class="search-item"
+          :class="{ active: i === active }" @mousedown.prevent="go(s)"
+        >
+          <ObjectIcon :object="s.object" size="small" />
+          <span class="truncate">
+            <span class="search-name">{{ s.name }}</span>
+            <span class="muted small"> · {{ OBJECTS[s.object].label }}<template v-if="s.detail"> · {{ s.detail }}</template></span>
+          </span>
+        </button>
+        <button class="search-item all" @mousedown.prevent="submit">
+          <Icon name="search" /> Show more results for "{{ q.trim() }}"
+        </button>
+      </div>
+    </div>
+
+    <div class="actions">
+      <div ref="createEl" class="dropdown">
+        <button class="header-btn add" title="Global Actions" aria-label="Create new" @click="createOpen = !createOpen">
+          <Icon name="add" :size="14" />
+        </button>
+        <div v-if="createOpen" class="menu right">
+          <div class="menu-heading">Create</div>
+          <button v-for="o in NAV_OBJECTS" :key="o" class="menu-item" @click="creating = o; createOpen = false">
+            <ObjectIcon :object="o" size="small" /> New {{ OBJECTS[o].label }}
+          </button>
+        </div>
+      </div>
+      <RouterLink to="/dashboard" class="header-btn" title="Dashboard"><Icon name="chart" :size="18" /></RouterLink>
+      <div ref="userEl" class="dropdown">
+        <button class="avatar-btn" :aria-label="'User menu for ' + store.user.name" @click="userOpen = !userOpen">
+          <span class="avatar" style="width: 32px; height: 32px; font-size: 12px">{{ initials(store.user.name) }}</span>
+        </button>
+        <div v-if="userOpen" class="menu right user-menu">
+          <div class="user-card">
+            <span class="avatar" style="width: 48px; height: 48px; font-size: 16px">{{ initials(store.user.name) }}</span>
+            <div>
+              <div style="font-weight: 700; font-size: 16px">{{ store.user.name }}</div>
+              <div class="muted small">{{ store.user.email }}</div>
+            </div>
+          </div>
+          <div class="menu-divider" />
+          <RouterLink to="/setup/import" class="menu-item" @click="userOpen = false"><Icon name="refresh" /> Import from Haflaway CRM</RouterLink>
+          <div class="menu-divider" />
+          <button class="menu-item" @click="doLogout"><Icon name="logout" /> Log Out</button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <RecordFormModal v-if="creating" :object="creating" @close="creating = null"
+    @saved="(id) => { router.push(`/o/${creating}/${id}`); creating = null }" />
+</template>
+
+<style scoped>
+.global-header {
+  height: 50px; background: var(--surface); display: flex; align-items: center; gap: 16px; padding: 0 16px;
+  box-shadow: 0 1px 0 var(--border-light);
+}
+.logo { display: flex; align-items: center; width: 200px; }
+.search { position: relative; flex: 0 1 600px; margin: 0 auto; }
+.search-icon { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-weak); }
+.search-input {
+  width: 100%; height: 32px; border: 1px solid var(--border); border-radius: var(--radius); padding: 0 12px 0 36px;
+  background: var(--surface);
+}
+.search-input:focus { outline: none; border-color: var(--brand); box-shadow: var(--focus); }
+.search-menu {
+  position: absolute; top: calc(100% + 4px); left: 0; right: 0; background: var(--surface); z-index: 60;
+  border: 1px solid var(--border-light); border-radius: var(--radius); box-shadow: var(--shadow-drop); padding: 4px 0;
+}
+.search-item { display: flex; align-items: center; gap: 10px; width: 100%; padding: 6px 12px; background: none; border: 0; text-align: left; cursor: pointer; }
+.search-item:hover, .search-item.active { background: var(--bg); }
+.search-item.all { color: var(--brand); border-top: 1px solid var(--border-light); padding: 10px 12px; }
+.search-name { font-weight: 600; }
+.actions { display: flex; align-items: center; gap: 8px; width: 200px; justify-content: flex-end; }
+.header-btn {
+  width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center; border-radius: var(--radius);
+  color: var(--text-weak); background: none; border: 0; cursor: pointer;
+}
+.header-btn:hover { background: var(--bg); color: var(--brand); text-decoration: none; }
+.header-btn.add { width: 22px; height: 22px; border: 2px solid var(--text-weak); border-radius: 4px; }
+.header-btn.add:hover { border-color: var(--brand); }
+.avatar-btn { background: none; border: 0; padding: 0; cursor: pointer; border-radius: 50%; display: flex; }
+.user-menu { width: 280px; }
+.user-card { display: flex; gap: 12px; align-items: center; padding: 12px; }
+@media (max-width: 800px) { .logo, .actions { width: auto; } }
+</style>
