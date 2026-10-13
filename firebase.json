@@ -1,5 +1,11 @@
 {
   "firestore": { "rules": "firestore.rules" },
+  "hosting": {
+    "site": "haflasalesforce",
+    "public": "dist",
+    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+    "rewrites": [{ "source": "**", "destination": "/index.html" }]
+  },
   "emulators": {
     "auth": { "host": "127.0.0.1", "port": 9099 },
     "firestore": { "host": "127.0.0.1", "port": 8080 },
