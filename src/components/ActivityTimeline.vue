@@ -79,7 +79,7 @@ function toggle(id) {
   expanded.value = s
 }
 
-const VERB = { call: 'logged a call', note: 'added a note', system: '', task: 'had a task' }
+const VERB = { call: 'logged a call', note: 'added a note', system: '', task: 'had a task', sms: 'sent an SMS' }
 const today = todayISO()
 const isOverdue = (t) => t.dueDate && t.dueDate < today
 </script>
@@ -137,7 +137,7 @@ const isOverdue = (t) => t.dueDate && t.dueDate < today
               <span v-else class="item-title truncate" :class="{ system: kind === 'system' }">{{ item.subject }}</span>
               <span class="spacer" />
               <span class="muted small" :title="dateTime(at)">{{ date(at) }}</span>
-              <button v-if="kind !== 'task' && kind !== 'system'" class="btn-icon bare small del" aria-label="Delete activity"
+              <button v-if="!['task', 'system', 'sms'].includes(kind)" class="btn-icon bare small del" aria-label="Delete activity"
                 @click="deleteRecord('activities', item.id)"><Icon name="delete" :size="12" /></button>
             </div>
             <div class="muted small">{{ item.ownerName }} {{ kind === 'task' ? 'completed a task' : VERB[kind] }}</div>

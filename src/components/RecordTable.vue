@@ -59,7 +59,7 @@ async function toggleComplete(r) {
 
 <template>
   <div class="table-wrap">
-    <table class="table">
+    <table class="table cards">
       <thead>
         <tr>
           <th v-if="showIndex" class="col-index" />
@@ -78,7 +78,8 @@ async function toggleComplete(r) {
           <td v-if="object === 'tasks'" class="col-check">
             <input type="checkbox" :checked="r.status === 'Completed'" :aria-label="'Complete ' + r.subject" @change="toggleComplete(r)" />
           </td>
-          <td v-for="(c, ci) in columns" :key="c" class="truncate" :class="{ num: isNum(c), done: object === 'tasks' && ci === 0 && r.status === 'Completed' }">
+          <td v-for="(c, ci) in columns" :key="c" class="truncate" :data-label="ci ? fieldDef(object, c)?.label : null"
+            :class="{ num: isNum(c), primary: ci === 0, done: object === 'tasks' && ci === 0 && r.status === 'Completed' }">
             <FieldValue :object="object" :record="r" :field="c" :link="ci === 0" />
           </td>
           <td v-if="actions" class="col-action">

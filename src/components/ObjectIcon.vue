@@ -14,6 +14,7 @@ const SPECIAL = {
   call: { color: '#48c3cc', icon: 'call' },
   note: { color: '#e6d478', icon: 'note' },
   email: { color: '#939393', icon: 'email' },
+  sms: { color: '#0b827c', icon: 'sms' },
   system: { color: '#7f8de1', icon: 'refresh' },
 }
 const meta = computed(() => SPECIAL[props.object] || OBJECTS[props.object] || SPECIAL.home)

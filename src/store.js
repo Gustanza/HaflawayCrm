@@ -3,9 +3,10 @@ import {
   onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, updateProfile,
 } from 'firebase/auth'
 import {
-  collection, doc, onSnapshot, addDoc, updateDoc, deleteDoc, setDoc, writeBatch,
+  collection, doc, onSnapshot, addDoc, updateDoc, deleteDoc, setDoc, writeBatch, query, where,
 } from 'firebase/firestore'
-import { auth, db } from '../fireCreds.js'
+import { httpsCallable } from 'firebase/functions'
+import { auth, db, functions } from '../fireCreds.js'
 import { OBJECTS, stageProbability, recordName, WON_STAGE } from './meta/objects.js'
 import { todayISO, addDaysISO } from './format.js'
 
@@ -25,6 +26,7 @@ export const store = reactive({
   loaded: false,
   error: null,
   toasts: [],
+  sms: [], // this user's open SMS drafts (pending, sending, scheduled, failed)
   ...Object.fromEntries(COLLECTIONS.map((c) => [c, []])),
 })
 
@@ -53,6 +55,24 @@ export async function signup(name, email, password) {
   await setDoc(docRef('users', cred.user.uid), { name, email, createdAt: Date.now() })
 }
 
+// Rename the signed-in user everywhere it shows: their profile, the owner name on records they own (stored on each
+// record), and the name SMS use ("<owner> atakupigia…") from now on.
+export async function updateMyName(name) {
+  const u = auth.currentUser
+  await updateProfile(u, { displayName: name })
+  await u.getIdToken(true) // SMS functions read the name from the sign-in token
+  store.user = { ...store.user, name }
+  await setDoc(docRef('users', u.uid), { name }, { merge: true })
+  const mine = [...Object.keys(OBJECTS), 'activities'].flatMap((c) =>
+    store[c].filter((r) => r.ownerId === u.uid && r.ownerName !== name).map((r) => docRef(c, r.id)))
+  for (let i = 0; i < mine.length; i += 450) {
+    const batch = writeBatch(db)
+    mine.slice(i, i + 450).forEach((ref) => batch.update(ref, { ownerName: name }))
+    await batch.commit()
+  }
+  return mine.length
+}
+
 export function logout() {
   return signOut(auth)
 }
@@ -78,6 +98,20 @@ function subscribeAll() {
       },
     ),
   )
+  unsubscribers.push(subscribeSms(store.user.uid))
+}
+
+// SMS drafts are created by Cloud Functions; each owner only sees (and approves) their own.
+function subscribeSms(uid) {
+  const q = query(col('sms'), where('ownerId', '==', uid), where('status', 'in', ['pending', 'sending', 'scheduled', 'failed']))
+  return onSnapshot(
+    q,
+    (snap) => (store.sms = snap.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => b.createdAt - a.createdAt)),
+    (err) => {
+      console.warn('[HaflaCREM] SMS drafts unavailable:', err.message)
+      store.sms = []
+    },
+  )
 }
 
 // Records created outside HaflaCREM (Firebase console, other apps) may use Firestore Timestamps
@@ -93,6 +127,7 @@ function unsubscribeAll() {
   unsubscribers.forEach((u) => u())
   unsubscribers = []
   COLLECTIONS.forEach((c) => (store[c] = []))
+  store.sms = []
   store.loaded = false
   store.error = null
 }
@@ -249,6 +284,18 @@ export async function convertLead(lead, { accountId, accountName, createOpportun
 
   await batch.commit()
   return { accountId, contactId: conRef.id, opportunityId }
+}
+
+/* ---------------- SMS ---------------- */
+
+// when: undefined (send now, refused during quiet hours) | 'now' (send anyway) | 'schedule' (next 08:00)
+export async function sendSms(id, { content, phone, when }) {
+  const res = await httpsCallable(functions, 'smsSend')({ id, content, phone, when })
+  return res.data
+}
+
+export function cancelSms(id) {
+  return httpsCallable(functions, 'smsCancel')({ id })
 }
 
 /* ---------------- Toasts ---------------- */

@@ -134,18 +134,18 @@ const tip = (r) => `${recordName(props.object, r)} — ${statusLabel}: ${r[cfg.c
         <span class="card-title">{{ selected.length ? selected.join(', ') : 'All' }} · {{ monthTitle }}</span>
         <span class="muted small">{{ visible.length }} {{ visible.length === 1 ? 'event' : 'events' }}</span>
       </div>
-      <table v-if="visible.length" class="table">
+      <table v-if="visible.length" class="table cards">
         <thead>
           <tr><th>{{ dateLabel }}</th><th>{{ meta.label }}</th><th>Details</th><th>{{ statusLabel }}</th><th>Phone</th><th>Owner</th></tr>
         </thead>
         <tbody>
           <tr v-for="r in visible" :key="r.id" :class="{ 'row-past': r[cfg.dateField] < today }">
-            <td style="white-space: nowrap">{{ fmtDate(r[cfg.dateField]) }}</td>
-            <td class="truncate"><RouterLink :to="`/o/${object}/${r.id}`">{{ recordName(object, r) }}</RouterLink></td>
-            <td class="truncate muted">{{ cfg.detail(r) }}</td>
-            <td><span class="status" :class="{ neutral: isNeutral(r) }" :style="chipStyle(r)"><i class="dot" />{{ r[cfg.colorField] || '—' }}</span></td>
-            <td><a v-if="r.phone" :href="'tel:' + r.phone">{{ r.phone }}</a></td>
-            <td class="truncate">{{ r.ownerName }}</td>
+            <td style="white-space: nowrap" :data-label="dateLabel">{{ fmtDate(r[cfg.dateField]) }}</td>
+            <td class="truncate primary"><RouterLink :to="`/o/${object}/${r.id}`">{{ recordName(object, r) }}</RouterLink></td>
+            <td class="truncate muted" data-label="Details">{{ cfg.detail(r) }}</td>
+            <td :data-label="statusLabel"><span class="status" :class="{ neutral: isNeutral(r) }" :style="chipStyle(r)"><i class="dot" />{{ r[cfg.colorField] || '—' }}</span></td>
+            <td data-label="Phone"><a v-if="r.phone" :href="'tel:' + r.phone">{{ r.phone }}</a></td>
+            <td class="truncate" data-label="Owner">{{ r.ownerName }}</td>
           </tr>
         </tbody>
       </table>
@@ -210,5 +210,18 @@ const tip = (r) => `${recordName(props.object, r)} — ${statusLabel}: ${r[cfg.c
 @media (max-width: 800px) {
   .day { min-height: 72px; }
   .chip-status { display: none; }
+}
+@media (max-width: 640px) {
+  .cal { padding: 0 8px 12px; }
+  .cal-title { min-width: 0; margin: 0 4px; font-size: 16px; }
+  .month-pick { flex: 1 1 120px; width: auto; }
+  .cal-filters > .spacer { display: none; }
+  .wd { padding: 4px 2px; text-align: center; font-size: 11px; }
+  .day { min-height: 56px; padding: 2px; gap: 2px; }
+  .day-num { text-align: center; font-size: 11px; }
+  .chip { padding: 1px 3px; border-left-width: 2px; }
+  .chip-name { font-size: 10px; }
+  .more { font-size: 10px; padding: 0 2px; }
+  .agenda-head { padding: 10px 12px 4px; }
 }
 </style>

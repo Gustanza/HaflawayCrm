@@ -22,11 +22,19 @@ service cloud.firestore {
       allow write: if request.auth != null && request.auth.uid == uid;
     }
 
+    // SMS drafts: only Cloud Functions create or change them (Send/Cancel go through callable functions),
+    // and each staff member sees only the drafts for records they own.
+    match /crm_sms/{id} {
+      allow read: if request.auth != null && resource.data.ownerId == request.auth.uid;
+      allow write: if false;
+    }
+
     // ---------------- Haflaway CRM (old app) ----------------
-    // Copied unchanged from HaflawayCrm/firestore.rules so the old app keeps working.
+    // Same access as HaflawayCrm/firestore.rules so the old app keeps working, but no longer covering
+    // HaflaCREM's crm_* collections — otherwise this catch-all would also let any client write crm_sms.
     // HaflaCREM only ever READS these, from its "Import from Haflaway CRM" tool.
-    match /{document=**} {
-      allow read, write: if request.auth != null;
+    match /{collection}/{document=**} {
+      allow read, write: if request.auth != null && !collection.matches('crm_.*');
     }
   }
 }

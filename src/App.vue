@@ -5,6 +5,7 @@ import { store, dismissToast } from './store.js'
 import GlobalHeader from './components/GlobalHeader.vue'
 import NavBar from './components/NavBar.vue'
 import Icon from './components/Icon.vue'
+import SmsPrompts from './components/SmsPrompts.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -29,6 +30,7 @@ watch(() => store.user, (u) => {
       <div v-if="!store.loaded" class="center-fill"><div class="spinner" /></div>
       <RouterView v-else :key="route.fullPath.split('?')[0]" />
     </main>
+    <SmsPrompts />
   </template>
 
   <div class="toasts">
