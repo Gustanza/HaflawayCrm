@@ -11,7 +11,8 @@ import RecordTable from '../components/RecordTable.vue'
 import RecordFormModal from '../components/RecordFormModal.vue'
 import DeleteModal from '../components/DeleteModal.vue'
 import ConvertLeadModal from '../components/ConvertLeadModal.vue'
-import { store, getRecord, updateRecord, changedFields, toast } from '../store.js'
+import ChangeOwnerModal from '../components/ChangeOwnerModal.vue'
+import { store, getRecord, updateRecord, changedFields, toast, isAdmin } from '../store.js'
 import { OBJECTS, fieldDef, recordName, isClosedStage, owes } from '../meta/objects.js'
 import { dateTime, money } from '../format.js'
 
@@ -34,6 +35,7 @@ const tab = ref(meta.related ? 'related' : 'details')
 const editOpen = ref(false)
 const deleteOpen = ref(null) // snapshot of the record being deleted
 const convertOpen = ref(false)
+const ownerOpen = ref(false)
 const newRelated = ref(null) // { object, defaults }
 
 // Inline edit of the whole Details section, like Lightning's pencil icons.
@@ -176,7 +178,10 @@ const oppTotals = computed(() => {
             </div>
             <div class="field">
               <div class="field-label">Owner</div>
-              <div class="field-value">{{ record.ownerName }}</div>
+              <div class="field-value">
+                {{ record.ownerName || 'No owner' }}
+                <button v-if="isAdmin()" class="link-btn small" style="margin-left: 8px" @click="ownerOpen = true">Change</button>
+              </div>
             </div>
             <div class="field">
               <div class="field-label">Created</div>
@@ -223,6 +228,7 @@ const oppTotals = computed(() => {
     <RecordFormModal v-if="newRelated" :object="newRelated.object" :defaults="newRelated.defaults"
       @close="newRelated = null" @saved="newRelated = null" />
     <ConvertLeadModal v-if="convertOpen" :lead="record" @close="convertOpen = false" />
+    <ChangeOwnerModal v-if="ownerOpen" :object="object" :record="record" @close="ownerOpen = false" />
   </div>
 
   <DeleteModal v-if="deleteOpen" :object="object" :record="deleteOpen" @close="deleteOpen = false" @deleted="router.push(`/o/${object}`)" />

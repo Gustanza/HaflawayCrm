@@ -1,12 +1,10 @@
 <script setup>
 import { ref } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { login, signup } from '../store.js'
+import { login } from '../store.js'
 
 const router = useRouter()
 const route = useRoute()
-const mode = ref('login')
-const name = ref('')
 const email = ref('')
 const password = ref('')
 const error = ref('')
@@ -14,8 +12,7 @@ const busy = ref(false)
 
 const MESSAGES = {
   'auth/invalid-credential': 'Please check your email and password. If you still can\'t log in, contact your administrator.',
-  'auth/email-already-in-use': 'An account with this email already exists. Log in instead.',
-  'auth/weak-password': 'Your password must be at least 6 characters.',
+  'auth/user-disabled': 'This account has been deactivated. Contact your administrator.',
   'auth/invalid-email': 'Enter a valid email address.',
   'auth/operation-not-allowed': 'Email/password sign-in is not enabled in Firebase. Enable it under Authentication → Sign-in method.',
   'auth/configuration-not-found': 'Firebase Authentication is not set up yet. Open the Firebase console → Authentication → Get started, then enable Email/Password.',
@@ -24,11 +21,9 @@ const MESSAGES = {
 
 async function submit() {
   error.value = ''
-  if (mode.value === 'signup' && !name.value.trim()) return (error.value = 'Enter your name.')
   busy.value = true
   try {
-    if (mode.value === 'login') await login(email.value.trim(), password.value)
-    else await signup(name.value.trim(), email.value.trim(), password.value)
+    await login(email.value.trim(), password.value)
     const r = route.query.redirect
     router.replace(typeof r === 'string' && r.startsWith('/') && !r.startsWith('//') ? r : '/')
   } catch (e) {
@@ -38,7 +33,6 @@ async function submit() {
   }
 }
 </script>
-
 <template>
   <div class="login-page">
     <div class="login-wrap">
@@ -51,21 +45,12 @@ async function submit() {
       </div>
       <form class="login-card" @submit.prevent="submit">
         <div v-if="error" class="login-error">{{ error }}</div>
-        <template v-if="mode === 'signup'">
-          <label for="name">Full Name</label>
-          <input id="name" v-model="name" class="input" autocomplete="name" />
-        </template>
         <label for="email">Email</label>
         <input id="email" v-model="email" class="input" type="email" autocomplete="username" required />
         <label for="password">Password</label>
-        <input id="password" v-model="password" class="input" type="password" :autocomplete="mode === 'login' ? 'current-password' : 'new-password'" required />
-        <button class="btn btn-brand login-btn" :disabled="busy">
-          {{ busy ? 'Please wait...' : mode === 'login' ? 'Log In' : 'Create Account' }}
-        </button>
-        <div class="switch">
-          <template v-if="mode === 'login'">New here? <button type="button" class="link-btn" @click="mode = 'signup'; error = ''">Create an account</button></template>
-          <template v-else>Already have an account? <button type="button" class="link-btn" @click="mode = 'login'; error = ''">Log in</button></template>
-        </div>
+        <input id="password" v-model="password" class="input" type="password" autocomplete="current-password" required />
+        <button class="btn btn-brand login-btn" :disabled="busy">{{ busy ? 'Please wait...' : 'Log In' }}</button>
+        <p class="switch muted">New to the team? Ask your administrator to create your account.</p>
       </form>
       <p class="foot">© {{ new Date().getFullYear() }} HaflaCREM</p>
     </div>

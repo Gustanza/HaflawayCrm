@@ -7,7 +7,8 @@ import { store } from '../store.js'
 
 const since = Date.now() - 60000 // also catch a draft created just before the page loaded
 const hidden = ref(new Set())
-const prompts = computed(() => store.sms.filter((d) => d.createdAt >= since && !hidden.value.has(d.id) && d.status !== 'scheduled').slice(0, 3))
+// Only your own drafts pop up; admins find the team's in the SMS inbox.
+const prompts = computed(() => store.sms.filter((d) => d.ownerId === store.user.uid && d.createdAt >= since && !hidden.value.has(d.id) && d.status !== 'scheduled').slice(0, 3))
 const hide = (id) => (hidden.value = new Set(hidden.value).add(id))
 </script>
 

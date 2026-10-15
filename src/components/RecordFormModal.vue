@@ -4,7 +4,7 @@ import { reactive, ref, computed, watch } from 'vue'
 import Modal from './Modal.vue'
 import FieldInput from './FieldInput.vue'
 import { OBJECTS, recordName } from '../meta/objects.js'
-import { createRecord, updateRecord, changedFields, toast } from '../store.js'
+import { createRecord, updateRecord, changedFields, toast, isAdmin, teamMembers, defaultOwnerId } from '../store.js'
 
 const props = defineProps({
   object: { type: String, required: true },
@@ -24,8 +24,12 @@ function blank() {
     f.relatedType = null
     f.relatedId = null
   }
-  return { ...f, ...props.defaults }
+  const out = { ...f, ...props.defaults }
+  // Admins choose who a new record belongs to (owners are changed later from the record page).
+  if (isAdmin()) out.ownerId = props.defaults.ownerId || defaultOwnerId(out)
+  return out
 }
+const chooseOwner = computed(() => !editing.value && isAdmin())
 
 const initial = editing.value ? { ...blank(), ...props.record } : null // snapshot to diff against on save
 const form = reactive(editing.value ? { ...initial } : blank())
@@ -90,6 +94,12 @@ async function save(andNew = false) {
         <abbr class="required">*</abbr> = Required Information
       </p>
       <FieldInput v-for="f in fields" :key="f.key" :field="f" :form="form" :error="errors[f.key]" />
+      <div v-if="chooseOwner" class="form-element">
+        <label for="record-owner"><abbr class="required" title="required">*</abbr>{{ meta.label }} Owner</label>
+        <select id="record-owner" v-model="form.ownerId" class="select">
+          <option v-for="u in teamMembers()" :key="u.id" :value="u.id">{{ u.name || u.email }}</option>
+        </select>
+      </div>
       <button type="submit" hidden />
     </form>
     <template #footer>

@@ -3,7 +3,7 @@
 import { ref, computed } from 'vue'
 import Icon from './Icon.vue'
 import ObjectIcon from './ObjectIcon.vue'
-import { sendSms, cancelSms, toast } from '../store.js'
+import { store, sendSms, cancelSms, toast } from '../store.js'
 import { smsParts, normalizePhone, formatPhone, inQuietHours } from '../smsText.js'
 import { timeAgo, dateTime } from '../format.js'
 
@@ -56,7 +56,7 @@ async function cancel() {
       <ObjectIcon :object="d.relatedType" size="small" />
       <div class="sms-title">
         <RouterLink :to="`/o/${d.relatedType}/${d.relatedId}`" class="truncate" @click="emit('navigate')">{{ d.recordName || 'Record' }}</RouterLink>
-        <span class="muted small">{{ d.label }} · {{ timeAgo(d.createdAt) }}</span>
+        <span class="muted small">{{ d.label }} · {{ timeAgo(d.createdAt) }}<template v-if="d.ownerId !== store.user.uid"> · for {{ d.ownerName || 'no owner' }}</template></span>
       </div>
       <button v-if="dismissible" class="btn-icon bare small" title="Later (stays in your SMS inbox)" aria-label="Hide for now" @click="emit('dismiss')">
         <Icon name="close" :size="14" />

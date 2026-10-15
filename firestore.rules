@@ -11,21 +11,47 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     // ---------------- HaflaCREM ----------------
-    // Any signed-in team member can read and write CRM records.
-    match /{collection}/{docId} {
-      allow read, write: if request.auth != null
-        && collection in ['crm_leads', 'crm_accounts', 'crm_contacts', 'crm_opportunities', 'crm_tasks', 'crm_activities'];
+    // Access comes from crm_users/{uid}: { role: 'admin' | 'rep', active: true }, set only by the admin Cloud
+    // Functions (functions/users.js). Accounts without an active role (pending or deactivated) see nothing.
+    // haflaway@gmail.com is always an admin, so the team can never lock itself out.
+    function signedIn() { return request.auth != null; }
+    function isSuperAdmin() { return signedIn() && request.auth.token.email == 'haflaway@gmail.com'; }
+    function profilePath() { return /databases/$(database)/documents/crm_users/$(request.auth.uid); }
+    function hasRole(roles) {
+      return signedIn() && exists(profilePath())
+        && get(profilePath()).data.get('active', false) == true
+        && get(profilePath()).data.get('role', '') in roles;
     }
-    // Profiles: readable by the team, writable only by their owner.
-    match /crm_users/{uid} {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null && request.auth.uid == uid;
+    function isAdmin() { return isSuperAdmin() || hasRole(['admin']); }
+    function isMember() { return isSuperAdmin() || hasRole(['admin', 'rep']); }
+    function isRecords(collection) {
+      return collection in ['crm_leads', 'crm_accounts', 'crm_contacts', 'crm_opportunities', 'crm_tasks', 'crm_activities'];
+    }
+    function mine(data) { return data.ownerId == request.auth.uid; }
+
+    // CRM records: admins see and change everything; reps only records they own, and can't give them away.
+    match /{collection}/{docId} {
+      allow read, delete: if isRecords(collection) && (isAdmin() || (isMember() && mine(resource.data)));
+      allow create: if isRecords(collection) && (isAdmin() || (isMember() && mine(request.resource.data)));
+      allow update: if isRecords(collection)
+        && (isAdmin() || (isMember() && mine(resource.data) && mine(request.resource.data)));
     }
 
-    // SMS drafts: only Cloud Functions create or change them (Send/Cancel go through callable functions),
-    // and each staff member sees only the drafts for records they own.
+    // Profiles: the team reads them (owner names, pickers); each person may only change their own name.
+    // Role and active status only change through the admin Cloud Functions.
+    match /crm_users/{uid} {
+      allow read: if signedIn() && (request.auth.uid == uid || isMember());
+      // Everyone else's profile is created by adminCreateUser; the super admin's is created on first sign-in.
+      allow create: if isSuperAdmin() && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['name', 'email', 'createdAt']);
+      allow update: if signedIn() && request.auth.uid == uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name']);
+    }
+
+    // SMS drafts: only Cloud Functions create or change them (Send/Cancel go through callable functions).
+    // Reps see the drafts for records they own; admins see all of them.
     match /crm_sms/{id} {
-      allow read: if request.auth != null && resource.data.ownerId == request.auth.uid;
+      allow read: if isAdmin() || (isMember() && resource.data.ownerId == request.auth.uid);
       allow write: if false;
     }
 

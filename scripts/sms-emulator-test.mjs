@@ -3,7 +3,7 @@
 //   2. node scripts/sms-emulator-test.mjs
 import assert from 'node:assert/strict'
 import { initializeApp } from 'firebase/app'
-import { getAuth, connectAuthEmulator, createUserWithEmailAndPassword, updateProfile } from 'firebase/auth'
+import { getAuth, connectAuthEmulator, createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile } from 'firebase/auth'
 import { getFirestore, connectFirestoreEmulator, collection, doc, addDoc, updateDoc, getDoc, getDocs, setDoc, query, where } from 'firebase/firestore'
 import { getFunctions, connectFunctionsEmulator, httpsCallable } from 'firebase/functions'
 
@@ -23,6 +23,11 @@ async function signUp(c, email, name) {
   await user.getIdToken(true)
   return user
 }
+// The admin creates the account (or gives an existing one access), then the person signs in.
+async function teamMember(c, email, name, role = 'rep') {
+  await admin.call('adminCreateUser', { name, email, password: 'password123', role })
+  return (await signInWithEmailAndPassword(c.auth, email, 'password123')).user
+}
 async function waitFor(fn, what, ms = 20000) {
   const end = Date.now() + ms
   for (;;) {
@@ -38,15 +43,16 @@ const rejects = (p, code) => assert.rejects(p, (e) => (assert.match(e.code, new 
 const ok = (msg) => console.log('✔', msg)
 
 const tag = Date.now()
+// The super admin (haflaway@gmail.com) is an admin by email; everyone else gets access from an admin.
+const admin = client('admin')
+const adminUser = await signUp(admin, 'haflaway@gmail.com', 'Hafla Admin').catch(async () =>
+  (await signInWithEmailAndPassword(admin.auth, 'haflaway@gmail.com', 'password123')).user)
 const staff = client('staff'), stranger = client('stranger')
-const me = await signUp(staff, 'staff@example.com'.replace('@', `+${tag}@`), 'Godwill Sam')
-// The allowlist in .env.demo-haflacrem is staff@example.com; sign in a second account with exactly that email.
+const me = await teamMember(staff, `staff+${tag}@example.com`, 'Godwill Sam') // a rep, but not on the SMS allowlist
+// The allowlist in .env.demo-haflacrem is staff@example.com.
 const allowed = client('allowed')
-const boss = await signUp(allowed, 'staff@example.com', 'Godwill Sam').catch(async () => {
-  const { signInWithEmailAndPassword } = await import('firebase/auth')
-  return (await signInWithEmailAndPassword(allowed.auth, 'staff@example.com', 'password123')).user
-})
-await signUp(stranger, `stranger+${tag}@example.com`, 'Stranger')
+const boss = await teamMember(allowed, 'staff@example.com', 'Godwill Sam')
+await signUp(stranger, `stranger+${tag}@example.com`, 'Stranger') // signed up through the API: no access
 const owner = { ownerId: boss.uid, ownerName: 'Godwill Sam' }
 
 // 1. New lead → welcome draft for its owner, with the number normalised.
@@ -95,7 +101,7 @@ assert.equal(sent.sentPhone, '255755111222')
 assert.equal(sent.phoneEdited, true)
 assert.equal(sent.contentEdited, true)
 assert.match(sent.campaignId, /^dryrun-/)
-const acts = (await getDocs(query(collection(allowed.db, 'crm_activities'), where('smsId', '==', welcome.id)))).docs
+const acts = (await getDocs(query(collection(allowed.db, 'crm_activities'), where('ownerId', '==', boss.uid), where('smsId', '==', welcome.id)))).docs
 assert.equal(acts.length, 1)
 assert.equal(acts[0].get('type'), 'sms')
 await rejects(allowed.call('smsSend', { id: welcome.id, content: edited, phone: '0755111222', when: 'now' }), 'failed-precondition')
@@ -129,5 +135,38 @@ assert.equal((await getDoc(doc(allowed.db, 'crm_sms', r1.id))).get('status'), 'o
 assert.match(r2.content, /TZS 150,000\. Salio lililobaki ni TZS 200,000/)
 ok(`payments merged into one receipt: "${r2.content}"`)
 
-console.log('\nAll SMS checks passed.')
+// 9. Roles: reps only see and change their own records; only admins manage people and owners.
+const mine = (c, uid, col) => getDocs(query(collection(c.db, col), where('ownerId', '==', uid)))
+await rejects(getDoc(doc(staff.db, 'crm_leads', lead.id)), 'permission-denied')
+await rejects(getDocs(collection(staff.db, 'crm_leads')), 'permission-denied') // a rep can't list everyone's
+await rejects(getDocs(collection(stranger.db, 'crm_leads')), 'permission-denied')
+await rejects(addDoc(collection(staff.db, 'crm_leads'), { lastName: 'X', ...owner, createdAt: now }), 'permission-denied')
+await rejects(updateDoc(doc(allowed.db, 'crm_leads', lead.id), { ownerId: me.uid }), 'permission-denied') // can't give records away
+await rejects(updateDoc(doc(staff.db, 'crm_users', me.uid), { role: 'admin' }), 'permission-denied')
+await rejects(setDoc(doc(stranger.db, 'crm_users', stranger.auth.currentUser.uid), { name: 'S', role: 'admin', active: true }), 'permission-denied')
+await rejects(staff.call('adminCreateUser', { name: 'X', email: `x+${tag}@example.com`, password: 'password123', role: 'admin' }), 'permission-denied')
+await updateDoc(doc(staff.db, 'crm_users', me.uid), { name: 'Godwill S' }) // renaming yourself is fine
+assert.ok((await mine(staff, me.uid, 'crm_leads')).size === 0)
+assert.ok((await getDocs(collection(admin.db, 'crm_leads'))).size >= 2) // admins see everything
+ok("reps can't read, list, create for, or hand off other people's records, or change roles; admins see all")
+
+// Admin cancels a rep's SMS draft, then moves the rep's job (with its open drafts) to another rep.
+await updateDoc(opp, { stage: 'Client Approval' })
+const approval = await waitFor(async () => (await drafts(allowed, boss.uid, opp.id)).find((d) => d.kind === 'client_approval' && d.status === 'pending'), 'design draft')
+const res2 = await admin.call('adminReassign', { object: 'opportunities', id: opp.id, toUid: me.uid })
+assert.ok(res2.moved >= 1 && res2.sms >= 1)
+assert.equal((await getDoc(doc(staff.db, 'crm_opportunities', opp.id))).get('ownerId'), me.uid)
+assert.equal((await getDoc(doc(staff.db, 'crm_sms', approval.id))).get('ownerId'), me.uid)
+await rejects(getDoc(doc(allowed.db, 'crm_opportunities', opp.id)), 'permission-denied')
+await admin.call('smsCancel', { id: approval.id })
+ok('admin moved a job and its waiting SMS to another rep, and can act on any draft')
+
+// Deactivate → signed out of the data; reactivate → back.
+await admin.call('adminUpdateUser', { uid: me.uid, active: false })
+await rejects(getDoc(doc(staff.db, 'crm_opportunities', opp.id)), 'permission-denied')
+await admin.call('adminUpdateUser', { uid: me.uid, active: true })
+await rejects(admin.call('adminUpdateUser', { uid: adminUser.uid, role: 'rep' }), 'failed-precondition') // the super admin (here also yourself) cannot be changed
+ok('deactivating cuts access immediately; the super admin cannot be changed')
+
+console.log('\nAll SMS and access checks passed.')
 process.exit(0)

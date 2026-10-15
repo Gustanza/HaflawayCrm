@@ -5,7 +5,7 @@ import Icon from './Icon.vue'
 import ObjectIcon from './ObjectIcon.vue'
 import RecordFormModal from './RecordFormModal.vue'
 import SmsCard from './SmsCard.vue'
-import { store, logout, updateMyName, toast } from '../store.js'
+import { store, logout, updateMyName, toast, isAdmin, isSuperAdminEmail, ROLES } from '../store.js'
 import Modal from './Modal.vue'
 import { NAV_OBJECTS, OBJECTS } from '../meta/objects.js'
 import { searchAll } from '../search.js'
@@ -42,7 +42,10 @@ function move(d) {
 const smsOpen = ref(false)
 const smsEl = ref(null)
 useClickOutside(smsEl, () => (smsOpen.value = false))
-const smsWaiting = computed(() => store.sms.filter((d) => d.status === 'pending' || d.status === 'failed').length)
+// Admins also see the team's drafts, listed after their own; the badge only counts their own.
+const mySms = computed(() => store.sms.filter((d) => d.ownerId === store.user.uid))
+const teamSms = computed(() => store.sms.filter((d) => d.ownerId !== store.user.uid))
+const smsWaiting = computed(() => mySms.value.filter((d) => d.status === 'pending' || d.status === 'failed').length)
 
 const createOpen = ref(false)
 const createEl = ref(null)
@@ -129,8 +132,12 @@ async function doLogout() {
         </button>
         <div v-if="smsOpen" class="menu right sms-inbox">
           <div class="menu-heading">SMS waiting for you</div>
-          <div v-if="!store.sms.length" class="sms-empty muted">Nothing to approve. New messages for your leads and jobs appear here.</div>
-          <SmsCard v-for="d in store.sms" :key="d.id" :draft="d" class="sms-item" @navigate="smsOpen = false" />
+          <div v-if="!mySms.length" class="sms-empty muted">Nothing to approve. New messages for your leads and jobs appear here.</div>
+          <SmsCard v-for="d in mySms" :key="d.id" :draft="d" class="sms-item" @navigate="smsOpen = false" />
+          <template v-if="teamSms.length">
+            <div class="menu-heading team-heading">Team SMS ({{ teamSms.length }})</div>
+            <SmsCard v-for="d in teamSms" :key="d.id" :draft="d" class="sms-item" @navigate="smsOpen = false" />
+          </template>
         </div>
       </div>
       <div ref="createEl" class="dropdown">
@@ -155,11 +162,15 @@ async function doLogout() {
             <div>
               <div style="font-weight: 700; font-size: 16px">{{ store.user.name }}</div>
               <div class="muted small">{{ store.user.email }}</div>
+              <div class="muted small">{{ isSuperAdminEmail(store.user.email) ? 'Super Admin' : ROLES[store.user.role] }}</div>
             </div>
           </div>
           <div class="menu-divider" />
           <button class="menu-item" @click="startRename"><Icon name="edit" /> Change your name</button>
-          <RouterLink to="/setup/import" class="menu-item" @click="userOpen = false"><Icon name="refresh" /> Import from Haflaway CRM</RouterLink>
+          <template v-if="isAdmin()">
+            <RouterLink to="/setup/users" class="menu-item" @click="userOpen = false"><Icon name="user" /> Users &amp; Access</RouterLink>
+            <RouterLink to="/setup/import" class="menu-item" @click="userOpen = false"><Icon name="refresh" /> Import from Haflaway CRM</RouterLink>
+          </template>
           <div class="menu-divider" />
           <button class="menu-item" @click="doLogout"><Icon name="logout" /> Log Out</button>
         </div>
@@ -222,6 +233,7 @@ async function doLogout() {
 .sms-inbox { width: 380px; max-height: calc(100vh - 80px); overflow-y: auto; padding-bottom: 0; }
 .sms-item { border-top: 1px solid var(--border-light); }
 .sms-empty { padding: 12px; }
+.team-heading { border-top: 1px solid var(--border-light); padding-top: 10px; margin-top: 4px; }
 @media (max-width: 640px) { .sms-inbox { position: fixed; top: 50px; left: 8px; right: 8px; width: auto; } }
 .user-card { display: flex; gap: 12px; align-items: center; padding: 12px; }
 @media (max-width: 800px) { .logo, .actions { width: auto; } }

@@ -3,7 +3,7 @@ import { ref, computed } from 'vue'
 import Icon from '../components/Icon.vue'
 import ObjectIcon from '../components/ObjectIcon.vue'
 import RecordFormModal from '../components/RecordFormModal.vue'
-import { store, updateRecord, nameOf, toast } from '../store.js'
+import { store, updateRecord, nameOf, toast, isAdmin } from '../store.js'
 import { OBJECTS, NAV_OBJECTS, recordName } from '../meta/objects.js'
 import { useMetrics } from '../metrics.js'
 import { money, date, timeAgo, todayISO } from '../format.js'
@@ -72,7 +72,7 @@ const creating = ref(null)
         <h1 class="title">{{ greeting }}, {{ firstName }}</h1>
       </div>
       <span class="spacer" />
-      <div class="btn-group">
+      <div v-if="isAdmin()" class="btn-group">
         <button class="btn" :class="{ 'btn-brand': scope === 'mine' }" @click="scope = 'mine'">My Data</button>
         <button class="btn" :class="{ 'btn-brand': scope === 'all' }" @click="scope = 'all'">Team</button>
       </div>

@@ -140,7 +140,7 @@ const isOverdue = (t) => t.dueDate && t.dueDate < today
               <button v-if="!['task', 'system', 'sms'].includes(kind)" class="btn-icon bare small del" aria-label="Delete activity"
                 @click="deleteRecord('activities', item.id)"><Icon name="delete" :size="12" /></button>
             </div>
-            <div class="muted small">{{ item.ownerName }} {{ kind === 'task' ? 'completed a task' : VERB[kind] }}</div>
+            <div class="muted small">{{ item.byName || item.ownerName }} {{ kind === 'task' ? 'completed a task' : VERB[kind] }}</div>
             <div v-if="expanded.has(item.id)" class="item-detail">{{ item.body || item.description }}</div>
           </div>
         </div>

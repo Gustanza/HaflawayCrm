@@ -17,7 +17,7 @@ To test on the live system instead, run `npm run dev` and delete the test record
 
 | Field | Value |
 | --- | --- |
-| Your test login | Name: Test Admin, Email: test@hafla.local, Password: test1234 |
+| Your test login | Name: Test Admin, Email: haflaway@gmail.com (the super admin), Password: test1234 |
 | Lead name | Neema Joseph |
 | Event / Client Name | Harusi ya Neema & Baraka |
 | Phone | +255 712 345 678 |
@@ -29,7 +29,7 @@ To test on the live system instead, run `npm run dev` and delete the test record
 
 A client has just messaged you on WhatsApp. You record them as a Lead with Status **New**.
 
-1. **Create your test account.** On the login page click **Create an account**, enter the test login, click **Create Account**.
+1. **Create your test account.** The app has no sign-up page (admins add people), so open the Emulator UI at http://127.0.0.1:4000/auth → **Add user**, enter the test login (Display name, Email, Password), then log in to the app with it.
     - Expect: you land on **Home** with "Good morning/afternoon, Test".
 2. **Check the form validation.** Go to the **Leads** tab → **New** → click **Save** without typing anything.
     - Expect: red **Complete this field.** under Last Name and Event / Client Name.

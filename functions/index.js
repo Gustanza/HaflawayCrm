@@ -1,7 +1,7 @@
 // HaflaCREM Cloud Functions — SMS to leads and clients through the SMTZ gateway.
 //
 // Nothing is ever sent automatically. A change to a lead or job creates an SMS *draft* in `crm_sms`;
-// the record's owner then presses Send (optionally editing the text or number) or Cancel in the app.
+// the record's owner (or an admin) then presses Send (optionally editing the text or number) or Cancel in the app.
 //
 //   draft lifecycle: pending → sending → sent
 //                            ↘ scheduled (approved during quiet hours) → sending → sent
@@ -21,6 +21,9 @@ import { defineSecret, defineString, defineBoolean } from 'firebase-functions/pa
 import { logger } from 'firebase-functions'
 import { planSms, normalizePhone, inQuietHours, nextSendWindow, ownerCallName, GROUP, DRAFT_TTL } from './sms.js'
 import { TEMPLATES, LABELS } from './templates.js'
+import { roleOf } from './users.js'
+
+export { adminCreateUser, adminUpdateUser, adminSetPassword, adminReassign } from './users.js'
 
 // Must match the Firestore database location, and FUNCTIONS_REGION in ../fireCreds.js.
 const REGION = 'us-central1'
@@ -29,7 +32,7 @@ const SMTZ_API_KEY = defineSecret('SMTZ_API_KEY')
 const SMTZ_SENDER_ID = defineString('SMTZ_SENDER_ID', { description: 'Approved SMTZ sender ID (max 11 characters), e.g. HAFLAWAY' })
 const SMTZ_BASE_URL = defineString('SMTZ_BASE_URL', { default: 'https://messaging-api.haflaway.com/api/v1' })
 const SMS_STAFF_EMAILS = defineString('SMS_STAFF_EMAILS', {
-  description: 'Comma-separated emails of staff allowed to send SMS (anyone can sign up to HaflaCREM, so this is required)',
+  description: 'Comma-separated emails of staff allowed to send SMS (admins always can)',
 })
 const SMS_PAYMENT_INFO = defineString('SMS_PAYMENT_INFO', { default: '', description: 'Optional payment line added to quote SMS, e.g. "Lipa Namba: 123456 (Haflaway)."' })
 const SMS_DRY_RUN = defineBoolean('SMS_DRY_RUN', { default: false, description: 'true = never call SMTZ; pretend messages were sent (for the emulator)' })
@@ -110,28 +113,32 @@ const recordName = (objectKey, r) =>
 
 /* ---------------- Staff actions ---------------- */
 
-function requireStaff(req) {
+// Admins can act on anyone's drafts; reps only on their own, and only if listed in SMS_STAFF_EMAILS.
+async function requireStaff(req) {
   if (!req.auth) throw new HttpsError('unauthenticated', 'Sign in first.')
   const email = String(req.auth.token.email || '').toLowerCase()
+  const role = await roleOf(req.auth)
+  if (!role) throw new HttpsError('permission-denied', 'Your HaflaCREM access is not active. Ask an admin.')
   const allowed = SMS_STAFF_EMAILS.value().split(',').map((e) => e.trim().toLowerCase()).filter(Boolean)
-  if (!allowed.includes(email)) {
+  if (role !== 'admin' && !allowed.includes(email)) {
     throw new HttpsError('permission-denied', `${email || 'This account'} is not allowed to send SMS. Ask an admin to add it to SMS_STAFF_EMAILS.`)
   }
-  return { uid: req.auth.uid, name: req.auth.token.name || email.split('@')[0] }
+  // `admin` stays out of the stored approvedBy/cancelledBy fields.
+  return [{ uid: req.auth.uid, name: req.auth.token.name || email.split('@')[0] }, role === 'admin']
 }
 
-// Load a draft the caller owns, inside a transaction.
-async function ownDraft(tx, ref, user) {
+// Load a draft the caller owns (or any draft, for an admin), inside a transaction.
+async function ownDraft(tx, ref, user, admin) {
   const snap = await tx.get(ref)
   if (!snap.exists) throw new HttpsError('not-found', 'This SMS no longer exists.')
   const d = snap.data()
-  if (d.ownerId !== user.uid) throw new HttpsError('permission-denied', `Only ${d.ownerName || 'the record owner'} can act on this SMS.`)
+  if (d.ownerId !== user.uid && !admin) throw new HttpsError('permission-denied', `Only ${d.ownerName || 'the record owner'} can act on this SMS.`)
   return d
 }
 
 // data: { id, content, phone, when?: 'now' | 'schedule' }. Outside 08:00–20:00 EAT the caller must choose `when`.
 export const smsSend = onCall({ secrets: [SMTZ_API_KEY] }, async (req) => {
-  const user = requireStaff(req)
+  const [user, admin] = await requireStaff(req)
   const { id, when } = req.data || {}
   const content = String(req.data?.content ?? '').trim()
   const phone = normalizePhone(req.data?.phone)
@@ -143,7 +150,7 @@ export const smsSend = onCall({ secrets: [SMTZ_API_KEY] }, async (req) => {
   const ref = db.collection(SMS).doc(id)
   const now = Date.now()
   const claimed = await db.runTransaction(async (tx) => {
-    const d = await ownDraft(tx, ref, user)
+    const d = await ownDraft(tx, ref, user, admin)
     if (!['pending', 'failed'].includes(d.status)) throw new HttpsError('failed-precondition', `This SMS is already ${d.status}.`)
     if (d.status === 'pending' && d.expiresAt <= now) throw new HttpsError('failed-precondition', 'This SMS expired (drafts last 24 hours).')
     if (!when && inQuietHours(now)) {
@@ -166,10 +173,10 @@ export const smsSend = onCall({ secrets: [SMTZ_API_KEY] }, async (req) => {
 })
 
 export const smsCancel = onCall(async (req) => {
-  const user = requireStaff(req)
+  const [user, admin] = await requireStaff(req)
   const ref = db.collection(SMS).doc(String(req.data?.id || ''))
   await db.runTransaction(async (tx) => {
-    const d = await ownDraft(tx, ref, user)
+    const d = await ownDraft(tx, ref, user, admin)
     if (!OPEN.includes(d.status)) throw new HttpsError('failed-precondition', `This SMS is already ${d.status}.`)
     tx.update(ref, { status: 'cancelled', cancelledBy: user, updatedAt: Date.now() })
   })
@@ -205,7 +212,8 @@ async function deliver(ref, d) {
     await db.collection('crm_activities').add({
       type: 'sms', subject: `SMS sent: ${d.label}`, body: `${d.sentContent}\n\nTo +${d.sentPhone}`,
       relatedType: d.relatedType, relatedId: d.relatedId, accountId: d.accountId || null,
-      ownerId: d.approvedBy.uid, ownerName: d.approvedBy.name, smsId: ref.id, createdAt: now,
+      // Activity belongs to the record's owner (so they see it); byId/byName say who sent it.
+      ownerId: d.ownerId, ownerName: d.ownerName, byId: d.approvedBy.uid, byName: d.approvedBy.name, smsId: ref.id, createdAt: now,
     })
     return { status: 'sent' }
   } catch (err) {

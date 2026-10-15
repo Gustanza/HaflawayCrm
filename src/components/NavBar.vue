@@ -1,15 +1,17 @@
 <script setup>
-import { ref, watch, nextTick } from 'vue'
+import { ref, computed, watch, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
 import Icon from './Icon.vue'
 import { NAV_OBJECTS, OBJECTS } from '../meta/objects.js'
+import { isAdmin } from '../store.js'
 
 const route = useRoute()
-const tabs = [
+const tabs = computed(() => [
   { to: '/', label: 'Home', match: (r) => r.name === 'home' },
   ...NAV_OBJECTS.map((o) => ({ to: `/o/${o}`, label: OBJECTS[o].plural, match: (r) => r.params.object === o })),
   { to: '/dashboard', label: 'Dashboards', match: (r) => r.name === 'dashboard' },
-]
+  ...(isAdmin() ? [{ to: '/setup/users', label: 'Users', match: (r) => r.name === 'users' }] : []),
+])
 
 // On narrow screens the tabs scroll sideways; keep the active one visible.
 const tabsEl = ref(null)

@@ -8,7 +8,7 @@ import KanbanBoard from '../components/KanbanBoard.vue'
 import CalendarView from '../components/CalendarView.vue'
 import RecordFormModal from '../components/RecordFormModal.vue'
 import DeleteModal from '../components/DeleteModal.vue'
-import { store } from '../store.js'
+import { store, isAdmin, roleOfProfile } from '../store.js'
 import { OBJECTS, fieldDef } from '../meta/objects.js'
 import { useClickOutside } from '../useClickOutside.js'
 
@@ -42,12 +42,19 @@ watch(() => route.query.mode, (v) => { if (v && v !== mode.value && MODES.some((
 
 const matchesSearch = (r, q) => !q || [meta.nameOf(r), ...meta.searchFields.map((f) => r[f])].some((v) => String(v ?? '').toLowerCase().includes(q))
 
+// Admins see the whole team's records and can narrow them to one owner ('' = everyone, 'none' = no owner).
+// Reps only ever have their own records, so they don't get this filter.
+const ownerFilter = ref(isAdmin() && typeof route.query.owner === 'string' ? route.query.owner : '')
+watch(ownerFilter, (v) => router.replace({ query: { ...route.query, owner: v || undefined } }))
+const matchesOwner = (r) => !ownerFilter.value || (ownerFilter.value === 'none' ? !r.ownerId : r.ownerId === ownerFilter.value)
+const owned = computed(() => store[object].filter(matchesOwner))
+
 // Calendar and Kanban show every stage/status themselves, so they start from all records (search still applies).
-const calendarRecords = computed(() => store[object].filter((r) => matchesSearch(r, filterText.value.trim().toLowerCase())))
+const calendarRecords = computed(() => owned.value.filter((r) => matchesSearch(r, filterText.value.trim().toLowerCase())))
 
 const records = computed(() => {
   const q = filterText.value.trim().toLowerCase()
-  return store[object]
+  return owned.value
     .filter((r) => view.value.filter(r, store.user))
     .filter((r) => !q || [meta.nameOf(r), ...meta.searchFields.map((f) => r[f])].some((v) => String(v ?? '').toLowerCase().includes(q)))
     .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
@@ -100,6 +107,13 @@ const deleting = ref(null)
           • Updated in real time
         </span>
         <span class="spacer" />
+        <select v-if="isAdmin()" v-model="ownerFilter" class="select owner-filter" aria-label="Filter by owner">
+          <option value="">All owners</option>
+          <option v-for="u in store.users" :key="u.id" :value="u.id">
+            {{ u.id === store.user.uid ? 'Me' : u.name || u.email }}{{ roleOfProfile(u) ? '' : ' (no access)' }}
+          </option>
+          <option value="none">No owner</option>
+        </select>
         <div class="list-search">
           <Icon name="search" class="list-search-icon" />
           <input v-model="filterText" class="input" placeholder="Search this list..." aria-label="Search this list" />
@@ -139,11 +153,13 @@ const deleting = ref(null)
 .view-switch:hover { color: var(--brand); }
 .toolbar { display: flex; align-items: center; gap: 8px; padding: 0 16px 12px; flex-wrap: wrap; }
 .list-search { position: relative; width: 240px; }
+.owner-filter { width: 180px; }
 .list-search .input { padding-left: 32px; }
 .list-search-icon { position: absolute; left: 10px; top: 8px; color: var(--text-weak); }
 @media (max-width: 640px) {
   .list-card { min-height: 0; }
   .list-search { flex: 1 1 160px; width: auto; }
+  .owner-filter { flex: 1 1 140px; width: auto; }
 }
 .empty { text-align: center; padding: 64px 16px; border-top: 1px solid var(--border-light); }
 </style>

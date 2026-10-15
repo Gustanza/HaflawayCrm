@@ -15,9 +15,10 @@ function quarterRange(d = new Date()) {
 const sum = (rows) => rows.reduce((s, r) => s + (Number(r.amount) || 0), 0)
 
 export function useMetrics(scope) {
-  // scope: ref('all' | 'mine')
-  const opps = computed(() => store.opportunities.filter((o) => scope.value === 'all' || o.ownerId === store.user?.uid))
-  const leads = computed(() => store.leads.filter((l) => scope.value === 'all' || l.ownerId === store.user?.uid))
+  // scope: ref('all' | 'mine' | a team member's uid). Reps only have their own records, so 'all' is theirs too.
+  const inScope = (r) => scope.value === 'all' || r.ownerId === (scope.value === 'mine' ? store.user?.uid : scope.value)
+  const opps = computed(() => store.opportunities.filter(inScope))
+  const leads = computed(() => store.leads.filter(inScope))
   const quarter = quarterRange()
 
   const open = computed(() => opps.value.filter((o) => !isClosedStage(o.stage)))

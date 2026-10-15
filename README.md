@@ -26,7 +26,22 @@ HaflaCREM shares the `haflawaycrm` Firebase project with the older **Haflaway CR
 ## Firebase setup (one time)
 1. Firebase console → Authentication → Sign-in method: enable **Email/Password**.
 2. Firestore → Rules: make sure the published rules include both sections of [`firestore.rules`](firestore.rules) (HaflaCREM's `crm_*` block **and** the old app's block) and **Publish**.
-3. Open the app, click **Create an account**, and start adding records.
+3. Deploy the rules and functions (see **Going live** below), then log in as **haflaway@gmail.com**, the super admin. If that account doesn't exist yet, create it in Firebase console → Authentication → **Add user** first.
+
+## Users and access
+There is no sign-up page. The admin adds people under **Users** (nav tab, or avatar menu → **Users & Access**).
+
+| Role | Can do |
+|---|---|
+| **Super Admin** (haflaway@gmail.com) | Everything an admin can. Always an admin; can't be demoted or deactivated. |
+| **Admin** | Sees and edits every record. Adds users, changes roles, resets passwords, deactivates people, and moves records between owners. Sees the whole team's SMS and can send or cancel any of them. |
+| **Sales Rep** | Sees and works **only the records they own**. Can't give records to someone else. |
+
+- **Owners:** a rep owns what they create. An admin picks the owner when creating a record, and can change it with **Owner → Change** on the record page. That moves the record's tasks, activity and waiting SMS too; for an account it also moves its contacts and opportunities.
+- **Leaving staff:** use **Deactivate** (signs them out, blocks login), then **Move records** to hand their book to someone else.
+- **Oversight:** list pages have an owner filter for admins; the Dashboard has a person picker and a **Team Performance** table.
+- **People who signed up before this existed** show as **Waiting for access** until an admin gives them a role. Records owned by old Haflaway accounts, or by nobody, are listed under **Records Without a Team Owner**.
+- Roles are stored on `crm_users/{uid}` (`role`, `active`) and only change through the admin Cloud Functions in [`functions/users.js`](functions/users.js). [`firestore.rules`](firestore.rules) enforces all of it. The super admin email is hard-coded in `firestore.rules`, `functions/users.js` and `src/store.js`; change all three together.
 
 Firebase config lives in [`fireCreds.js`](fireCreds.js). Object fields, list views and stages are defined in [`src/meta/objects.js`](src/meta/objects.js); edit that file to add fields or change picklists. Currency is set by `CURRENCY` in the same file.
 
@@ -50,6 +65,6 @@ firebase functions:secrets:set SMTZ_API_KEY          # paste the SMTZ API key wh
 cp functions/.env.example functions/.env.haflawaycrm # set SMTZ_SENDER_ID and SMS_STAFF_EMAILS
 firebase deploy --only functions,firestore:rules
 ```
-`SMS_STAFF_EMAILS` is required: anyone can sign up to HaflaCREM, so only the listed emails can send SMS. `REGION` in `functions/index.js` and `FUNCTIONS_REGION` in `fireCreds.js` must both match the Firestore database location.
+`SMS_STAFF_EMAILS` lists the reps who may send SMS for their own records; admins can always send. `REGION` in `functions/index.js` and `FUNCTIONS_REGION` in `fireCreds.js` must both match the Firestore database location.
 
-**Testing:** `cd functions && npm test` runs the unit tests. To test end to end, start `npm run emulators` and then run `node scripts/sms-emulator-test.mjs`. The emulator uses `SMS_DRY_RUN=true`, so it never sends a real SMS. To try it in the browser, run `npm run dev:emu` and sign up as `staff@example.com`.
+**Testing:** `cd functions && npm test` runs the unit tests. To test end to end, start `npm run emulators` and then run `node scripts/sms-emulator-test.mjs`. The emulator uses `SMS_DRY_RUN=true`, so it never sends a real SMS. The same script checks roles and access (reps can't see each other's records, deactivation, moving records). To try it in the browser, run `npm run dev:emu`, add `haflaway@gmail.com` in the Emulator UI (http://127.0.0.1:4000/auth), log in, and add other users from **Users**.
