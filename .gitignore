@@ -25,3 +25,8 @@ dist-ssr
 
 # Data backups contain client personal data
 backups/
+
+# Cloud Functions: live settings and local secrets stay out of git
+functions/.env.haflawaycrm
+functions/.secret.local
+functions/node_modules

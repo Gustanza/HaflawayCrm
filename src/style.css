@@ -50,6 +50,7 @@ input[type='checkbox'] { accent-color: var(--brand); width: 14px; height: 14px; 
 .small { font-size: 12px; }
 .truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 @media (max-width: 1024px) { .grid-main { grid-template-columns: 1fr; } }
+@media (max-width: 640px) { .page { padding: 8px; } }
 
 /* ---------- Card ---------- */
 .card {
@@ -151,6 +152,20 @@ input[type='checkbox'] { accent-color: var(--brand); width: 14px; height: 14px; 
 .table .num { text-align: right; }
 .table .col-index { width: 40px; color: var(--text-weak); text-align: right; }
 .table .col-check, .table .col-action { width: 40px; text-align: center; }
+/* Phones: each row becomes a card — name and actions on top, the other columns as label/value lines. */
+@media (max-width: 640px) {
+  .table.cards thead, .table.cards .col-index { display: none; }
+  .table.cards, .table.cards tbody { display: block; }
+  .table.cards tr { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; padding: 10px 12px; border-bottom: 1px solid var(--border-light); }
+  .table.cards td { display: block; height: auto; max-width: none; padding: 0; border: 0; white-space: normal; text-align: left; }
+  .table.cards tbody tr:hover td { background: none; }
+  .table.cards .col-check { grid-row: 1; grid-column: 1; width: auto; padding-right: 10px; }
+  .table.cards td.primary { grid-row: 1; grid-column: 2; font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .table.cards .col-action { grid-row: 1; grid-column: 3; width: auto; }
+  .table.cards td[data-label] { grid-column: 1 / -1; display: flex; gap: 12px; padding-top: 2px; font-size: 13px; }
+  .table.cards td[data-label]:empty { display: none; }
+  .table.cards td[data-label]::before { content: attr(data-label); flex: 0 0 104px; color: var(--text-weak); font-size: 12px; }
+}
 
 /* ---------- Badges & pills ---------- */
 .badge {

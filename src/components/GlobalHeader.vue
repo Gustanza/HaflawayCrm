@@ -4,7 +4,9 @@ import { useRouter, useRoute } from 'vue-router'
 import Icon from './Icon.vue'
 import ObjectIcon from './ObjectIcon.vue'
 import RecordFormModal from './RecordFormModal.vue'
-import { store, logout } from '../store.js'
+import SmsCard from './SmsCard.vue'
+import { store, logout, updateMyName, toast } from '../store.js'
+import Modal from './Modal.vue'
 import { NAV_OBJECTS, OBJECTS } from '../meta/objects.js'
 import { searchAll } from '../search.js'
 import { initials } from '../format.js'
@@ -37,6 +39,11 @@ function move(d) {
   if (n) active.value = (active.value + d + n) % n
 }
 
+const smsOpen = ref(false)
+const smsEl = ref(null)
+useClickOutside(smsEl, () => (smsOpen.value = false))
+const smsWaiting = computed(() => store.sms.filter((d) => d.status === 'pending' || d.status === 'failed').length)
+
 const createOpen = ref(false)
 const createEl = ref(null)
 useClickOutside(createEl, () => (createOpen.value = false))
@@ -45,6 +52,34 @@ const creating = ref(null)
 const userOpen = ref(false)
 const userEl = ref(null)
 useClickOutside(userEl, () => (userOpen.value = false))
+
+const renaming = ref(false)
+const newName = ref('')
+const savingName = ref(false)
+// Mirrors ownerCallName in functions/sms.js: first name, keeping a leading title ("Mr Sam").
+const callName = computed(() => {
+  const w = newName.value.trim().split(/\s+/).filter(Boolean)
+  return /^(mr|mrs|ms|miss|mx|dr|prof|eng|bw|bi|sir|madam)\.?$/i.test(w[0] || '') && w[1] ? `${w[0]} ${w[1]}` : w[0] || ''
+})
+function startRename() {
+  newName.value = store.user.name
+  renaming.value = true
+  userOpen.value = false
+}
+async function saveName() {
+  const name = newName.value.trim()
+  if (!name) return
+  savingName.value = true
+  try {
+    const n = await updateMyName(name)
+    toast(`Your name is now ${name}${n ? ` (updated on ${n} records)` : ''}.`)
+    renaming.value = false
+  } catch (e) {
+    toast(e.message, 'error')
+  } finally {
+    savingName.value = false
+  }
+}
 
 async function doLogout() {
   await logout()
@@ -86,6 +121,18 @@ async function doLogout() {
     </div>
 
     <div class="actions">
+      <div ref="smsEl" class="dropdown">
+        <button class="header-btn sms-btn" :title="smsWaiting ? `${smsWaiting} SMS waiting for you` : 'SMS'" :aria-label="`SMS inbox, ${smsWaiting} waiting`"
+          @click="smsOpen = !smsOpen">
+          <Icon name="sms" :size="18" />
+          <span v-if="smsWaiting" class="sms-badge">{{ smsWaiting }}</span>
+        </button>
+        <div v-if="smsOpen" class="menu right sms-inbox">
+          <div class="menu-heading">SMS waiting for you</div>
+          <div v-if="!store.sms.length" class="sms-empty muted">Nothing to approve. New messages for your leads and jobs appear here.</div>
+          <SmsCard v-for="d in store.sms" :key="d.id" :draft="d" class="sms-item" @navigate="smsOpen = false" />
+        </div>
+      </div>
       <div ref="createEl" class="dropdown">
         <button class="header-btn add" title="Global Actions" aria-label="Create new" @click="createOpen = !createOpen">
           <Icon name="add" :size="14" />
@@ -111,6 +158,7 @@ async function doLogout() {
             </div>
           </div>
           <div class="menu-divider" />
+          <button class="menu-item" @click="startRename"><Icon name="edit" /> Change your name</button>
           <RouterLink to="/setup/import" class="menu-item" @click="userOpen = false"><Icon name="refresh" /> Import from Haflaway CRM</RouterLink>
           <div class="menu-divider" />
           <button class="menu-item" @click="doLogout"><Icon name="logout" /> Log Out</button>
@@ -118,6 +166,18 @@ async function doLogout() {
       </div>
     </div>
   </header>
+
+  <Modal v-if="renaming" small title="Change your name" @close="renaming = false">
+    <form class="form-element" @submit.prevent="saveName">
+      <label for="my-name">Your name</label>
+      <input id="my-name" v-model="newName" class="input" maxlength="60" autofocus />
+      <p class="muted small" style="margin-top: 8px">Shown as the owner of your leads and jobs, and in SMS to clients, e.g. "{{ callName || 'Name' }} atakupigia hivi karibuni".</p>
+    </form>
+    <template #footer>
+      <button class="btn" @click="renaming = false">Cancel</button>
+      <button class="btn btn-brand" :disabled="savingName || !newName.trim()" @click="saveName">{{ savingName ? 'Saving…' : 'Save' }}</button>
+    </template>
+  </Modal>
 
   <RecordFormModal v-if="creating" :object="creating" @close="creating = null"
     @saved="(id) => { router.push(`/o/${creating}/${id}`); creating = null }" />
@@ -154,6 +214,16 @@ async function doLogout() {
 .header-btn.add:hover { border-color: var(--brand); }
 .avatar-btn { background: none; border: 0; padding: 0; cursor: pointer; border-radius: 50%; display: flex; }
 .user-menu { width: 280px; }
+.sms-btn { position: relative; }
+.sms-badge {
+  position: absolute; top: -2px; right: -4px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px;
+  background: var(--error-bright); color: #fff; font-size: 11px; font-weight: 700; line-height: 18px; text-align: center;
+}
+.sms-inbox { width: 380px; max-height: calc(100vh - 80px); overflow-y: auto; padding-bottom: 0; }
+.sms-item { border-top: 1px solid var(--border-light); }
+.sms-empty { padding: 12px; }
+@media (max-width: 640px) { .sms-inbox { position: fixed; top: 50px; left: 8px; right: 8px; width: auto; } }
 .user-card { display: flex; gap: 12px; align-items: center; padding: 12px; }
 @media (max-width: 800px) { .logo, .actions { width: auto; } }
+@media (max-width: 640px) { .global-header { gap: 8px; padding: 0 8px; } .actions { gap: 4px; } }
 </style>

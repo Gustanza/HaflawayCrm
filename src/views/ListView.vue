@@ -141,5 +141,9 @@ const deleting = ref(null)
 .list-search { position: relative; width: 240px; }
 .list-search .input { padding-left: 32px; }
 .list-search-icon { position: absolute; left: 10px; top: 8px; color: var(--text-weak); }
+@media (max-width: 640px) {
+  .list-card { min-height: 0; }
+  .list-search { flex: 1 1 160px; width: auto; }
+}
 .empty { text-align: center; padding: 64px 16px; border-top: 1px solid var(--border-light); }
 </style>

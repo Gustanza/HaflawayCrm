@@ -1,4 +1,5 @@
 <script setup>
+import { ref, watch, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
 import Icon from './Icon.vue'
 import { NAV_OBJECTS, OBJECTS } from '../meta/objects.js'
@@ -9,6 +10,12 @@ const tabs = [
   ...NAV_OBJECTS.map((o) => ({ to: `/o/${o}`, label: OBJECTS[o].plural, match: (r) => r.params.object === o })),
   { to: '/dashboard', label: 'Dashboards', match: (r) => r.name === 'dashboard' },
 ]
+
+// On narrow screens the tabs scroll sideways; keep the active one visible.
+const tabsEl = ref(null)
+watch(() => route.fullPath, () => nextTick(() => {
+  tabsEl.value?.querySelector('.nav-tab.active')?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+}), { immediate: true })
 </script>
 
 <template>
@@ -17,7 +24,7 @@ const tabs = [
       <span class="waffle"><Icon name="waffle" :size="18" /></span>
       <span>Sales</span>
     </div>
-    <div class="nav-tabs">
+    <div ref="tabsEl" class="nav-tabs">
       <RouterLink v-for="t in tabs" :key="t.to" :to="t.to" class="nav-tab" :class="{ active: t.match(route) }">
         {{ t.label }}
       </RouterLink>
@@ -42,4 +49,10 @@ const tabs = [
 .nav-tab:hover::before { background: var(--border); }
 .nav-tab.active { background: rgba(1, 118, 211, .06); font-weight: 700; }
 .nav-tab.active::before { background: var(--brand); }
+@media (max-width: 640px) {
+  .nav-bar { padding: 0 0 0 4px; }
+  .app-name { padding-right: 4px; }
+  .app-name > span:last-child { display: none; }
+  .nav-tabs { scrollbar-width: none; }
+}
 </style>
