@@ -34,7 +34,7 @@ function setRelated(hit) {
       class="input" type="number" min="0" :step="field.type === 'currency' ? 'any' : 1" :readonly="field.readonly" />
 
     <input v-else :id="id" v-model.trim="form[field.key]" class="input"
-      :type="{ date: 'date', email: 'email', phone: 'tel', url: 'url' }[field.type] || 'text'" />
+      :type="{ date: 'date', time: 'time', email: 'email', phone: 'tel', url: 'url' }[field.type] || 'text'" />
 
     <div v-if="error" class="form-error">{{ error }}</div>
   </div>

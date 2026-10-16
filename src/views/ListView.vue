@@ -57,10 +57,11 @@ const records = computed(() => {
   return owned.value
     .filter((r) => view.value.filter(r, store.user))
     .filter((r) => !q || [meta.nameOf(r), ...meta.searchFields.map((f) => r[f])].some((v) => String(v ?? '').toLowerCase().includes(q)))
-    .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
+    .sort(view.value.sort || ((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)))
 })
 
-const sortLabel = computed(() => (sort.value.key ? fieldDef(object, sort.value.key)?.label : 'Last Modified Date'))
+const sortLabel = computed(() => (sort.value.key ? fieldDef(object, sort.value.key)?.label
+  : view.value.sort ? 'Due Date & Time, then Priority' : 'Last Modified Date'))
 
 const viewMenu = ref(false)
 const viewEl = ref(null)

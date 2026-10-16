@@ -76,7 +76,8 @@ async function completeTask() {
 
 // Fields present on the document that this object's metadata doesn't define (e.g. written by another app).
 const KNOWN = ['id', 'ownerId', 'ownerName', 'createdAt', 'updatedAt', 'relatedType', 'relatedId', 'accountId',
-  'convertedAt', 'convertedAccountId', 'convertedContactId', 'convertedOpportunityId', 'balance', 'legacy']
+  'convertedAt', 'convertedAccountId', 'convertedContactId', 'convertedOpportunityId', 'balance', 'legacy',
+  'firstName', 'lastName', 'byId', 'byName'] // a lead's name parts are kept in step with its Full Name
 const extraFields = computed(() =>
   Object.entries(record.value || {}).filter(([k]) => !KNOWN.includes(k) && !meta.fields.some((f) => f.key === k)),
 )
@@ -115,6 +116,7 @@ const oppTotals = computed(() => {
           <button v-if="object === 'tasks' && record.status !== 'Completed'" class="btn" @click="completeTask">
             <Icon name="check" /> Mark Complete
           </button>
+          <button v-if="isAdmin()" class="btn" @click="ownerOpen = true"><Icon name="user" /> Change Owner</button>
           <div class="btn-group">
             <button class="btn" @click="editOpen = true">Edit</button>
             <button class="btn" @click="deleteOpen = { ...record }">Delete</button>

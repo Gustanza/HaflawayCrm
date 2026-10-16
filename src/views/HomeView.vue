@@ -4,9 +4,9 @@ import Icon from '../components/Icon.vue'
 import ObjectIcon from '../components/ObjectIcon.vue'
 import RecordFormModal from '../components/RecordFormModal.vue'
 import { store, updateRecord, nameOf, toast, isAdmin } from '../store.js'
-import { OBJECTS, NAV_OBJECTS, recordName } from '../meta/objects.js'
+import { OBJECTS, NAV_OBJECTS, recordName, compareTasks, isTaskOverdue } from '../meta/objects.js'
 import { useMetrics } from '../metrics.js'
-import { money, date, timeAgo, todayISO } from '../format.js'
+import { money, date, timeAgo, todayISO, dueLabel } from '../format.js'
 
 const scope = ref('mine')
 const m = useMetrics(scope)
@@ -19,7 +19,7 @@ const today = todayISO()
 const myTasks = computed(() =>
   store.tasks
     .filter((t) => t.ownerId === store.user.uid && t.status !== 'Completed' && (!t.dueDate || t.dueDate <= today))
-    .sort((a, b) => (a.dueDate || '9999').localeCompare(b.dueDate || '9999'))
+    .sort(compareTasks)
     .slice(0, 8),
 )
 const upcomingCount = computed(() => store.tasks.filter((t) => t.ownerId === store.user.uid && t.status !== 'Completed' && t.dueDate > today).length)
@@ -38,7 +38,7 @@ const recent = computed(() =>
 // "Assistant" insights, like Lightning's Home assistant card.
 const insights = computed(() => {
   const list = []
-  const overdue = store.tasks.filter((t) => t.ownerId === store.user.uid && t.status !== 'Completed' && t.dueDate && t.dueDate < today)
+  const overdue = store.tasks.filter((t) => t.ownerId === store.user.uid && isTaskOverdue(t))
   if (overdue.length) list.push({ icon: 'tasks', text: `You have ${overdue.length} overdue ${overdue.length === 1 ? 'task' : 'tasks'}`, to: '/o/tasks?view=overdue' })
   for (const o of m.closingSoon.value.slice(0, 3)) {
     list.push({ icon: 'opportunities', text: o.overdue ? `"${o.name}" is past its delivery date` : `"${o.name}" must be delivered by ${date(o.closeDate)}`, to: `/o/opportunities/${o.id}` })
@@ -167,7 +167,7 @@ const creating = ref(null)
               <RouterLink :to="`/o/tasks/${t.id}`" class="truncate" style="display: block">{{ t.subject }}</RouterLink>
               <div v-if="t.relatedId" class="muted small truncate">{{ nameOf(t.relatedType, t.relatedId) }}</div>
             </div>
-            <span class="small" :class="t.dueDate && t.dueDate < today ? 'overdue' : 'muted'">{{ t.dueDate ? date(t.dueDate) : '' }}</span>
+            <span class="small" :class="isTaskOverdue(t) ? 'overdue' : 'muted'">{{ dueLabel(t) }}</span>
           </div>
           <div class="card-footer">
             <RouterLink to="/o/tasks?view=mine">View All</RouterLink>

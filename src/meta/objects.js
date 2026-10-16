@@ -1,4 +1,5 @@
 // Object metadata: drives list views, forms, record pages and search (like Salesforce's Object Manager).
+import { ref } from 'vue'
 
 export const CURRENCY = 'TZS'
 export const LOCALE = 'en-US'
@@ -8,6 +9,26 @@ const DAY = 86400000
 const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
 const isMine = (r, user) => r.ownerId === user?.uid
 const isRecent = (r) => (r.createdAt || 0) > Date.now() - 7 * DAY
+
+// Ticks every 30 seconds so "overdue" updates while the page stays open (8:00 AM task → overdue at 8:00).
+export const clock = ref(Date.now())
+setInterval(() => (clock.value = Date.now()), 30000)
+
+// When a task is due, in ms. With no time it counts as due by the end of that day; no date → never.
+export function taskDueAt(t) {
+  if (!t?.dueDate) return Infinity
+  const [y, m, d] = t.dueDate.split('-').map(Number)
+  const [hh, mm] = /^\d{2}:\d{2}$/.test(t.dueTime || '') ? t.dueTime.split(':').map(Number) : [23, 59]
+  return new Date(y, m - 1, d, hh, mm).getTime()
+}
+export const isTaskOverdue = (t) => t.status !== 'Completed' && taskDueAt(t) < clock.value
+const PRIORITY_RANK = { High: 0, Normal: 1, Low: 2 }
+// Agenda order: earliest due first (so overdue comes first), then High → Low priority; undated tasks last.
+export function compareTasks(a, b) {
+  const da = taskDueAt(a), db = taskDueAt(b)
+  if (da !== db) return da < db ? -1 : 1
+  return (PRIORITY_RANK[a.priority] ?? 1) - (PRIORITY_RANK[b.priority] ?? 1)
+}
 
 export const LEAD_SOURCES = ['WhatsApp', 'Instagram', 'Facebook', 'TikTok', 'Referral', 'Repeat Customer', 'Agent / Partner', 'Event / Kikao', 'Phone Call', 'Walk-in', 'Website', 'Other']
 export const SERVICES = ['Kadi za Michango', 'SMS Reminder za Michango', 'Kadi za Mwaliko wa Kamati', 'Save the Date', 'Invitation Card',
@@ -46,12 +67,12 @@ export const OBJECTS = {
     plural: 'Leads',
     color: '#f88962',
     icon: 'lead',
-    nameOf: (r) => [r.firstName, r.lastName].filter(Boolean).join(' '),
-    searchFields: ['firstName', 'lastName', 'company', 'email', 'phone'],
+    // One Full Name field; firstName/lastName are still saved from it (SMS greetings, lead conversion, imports).
+    nameOf: (r) => r.fullName || [r.firstName, r.lastName].filter(Boolean).join(' '),
+    searchFields: ['fullName', 'company', 'email', 'phone'],
     fields: [
-      { key: 'firstName', label: 'First Name', type: 'text' },
-      { key: 'lastName', label: 'Last Name', type: 'text', required: true },
-      { key: 'company', label: 'Event / Client Name', type: 'text', required: true },
+      { key: 'fullName', label: 'Full Name', type: 'text', required: true },
+      { key: 'company', label: 'Event / Client Name', type: 'text' },
       { key: 'title', label: 'Title', type: 'text' },
       { key: 'email', label: 'Email', type: 'email' },
       { key: 'phone', label: 'Phone', type: 'phone' },
@@ -213,18 +234,21 @@ export const OBJECTS = {
     fields: [
       { key: 'subject', label: 'Subject', type: 'text', required: true },
       { key: 'dueDate', label: 'Due Date', type: 'date' },
+      { key: 'dueTime', label: 'Due Time', type: 'time' },
       { key: 'status', label: 'Status', type: 'picklist', required: true, default: 'Not Started', options: ['Not Started', 'In Progress', 'Completed'] },
       { key: 'priority', label: 'Priority', type: 'picklist', default: 'Normal', options: ['High', 'Normal', 'Low'] },
       { key: 'related', label: 'Related To', type: 'related' },
       { key: 'description', label: 'Comments', type: 'textarea', wide: true },
     ],
+    // The Due Date column shows the time too ("Tomorrow, 8:00 AM") and turns red once it has passed.
     listColumns: ['subject', 'dueDate', 'status', 'priority', 'related', 'ownerName'],
     highlights: ['dueDate', 'status', 'priority', 'related', 'ownerName'],
+    // Open-task views run in agenda order: overdue first, then by due date and time, then priority.
     listViews: [
-      { key: 'open', label: 'Open Tasks', filter: (r) => r.status !== 'Completed' },
-      { key: 'today', label: "Today's Tasks", filter: (r) => r.status !== 'Completed' && r.dueDate && r.dueDate <= today() },
-      { key: 'overdue', label: 'Overdue Tasks', filter: (r) => r.status !== 'Completed' && r.dueDate && r.dueDate < today() },
-      { key: 'mine', label: 'My Tasks', filter: (r, u) => isMine(r, u) && r.status !== 'Completed' },
+      { key: 'open', label: 'Open Tasks', filter: (r) => r.status !== 'Completed', sort: compareTasks },
+      { key: 'today', label: "Today's Tasks", filter: (r) => r.status !== 'Completed' && r.dueDate && r.dueDate <= today(), sort: compareTasks },
+      { key: 'overdue', label: 'Overdue Tasks', filter: isTaskOverdue, sort: compareTasks },
+      { key: 'mine', label: 'My Tasks', filter: (r, u) => isMine(r, u) && r.status !== 'Completed', sort: compareTasks },
       { key: 'completed', label: 'Completed Tasks', filter: (r) => r.status === 'Completed' },
       { key: 'all', label: 'All Tasks', filter: () => true },
     ],
@@ -245,6 +269,13 @@ export function fieldDef(objectKey, fieldKey) {
 export function recordName(objectKey, r) {
   if (!r) return ''
   return OBJECTS[objectKey]?.nameOf(r) || r.name || r.fullName || r.title || r.email || r.company || '(no name)'
+}
+
+// "Neema Joseph" → { firstName: 'Neema', lastName: 'Joseph' }; a single word is a last name only, like the importer.
+export function splitFullName(full) {
+  const parts = String(full || '').trim().split(/\s+/).filter(Boolean)
+  if (parts.length < 2) return { firstName: '', lastName: parts[0] || '' }
+  return { firstName: parts.slice(0, -1).join(' '), lastName: parts.at(-1) }
 }
 
 export function stageProbability(stage) {

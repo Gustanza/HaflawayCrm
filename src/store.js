@@ -5,7 +5,7 @@ import {
 } from 'firebase/firestore'
 import { httpsCallable } from 'firebase/functions'
 import { auth, db, functions } from '../fireCreds.js'
-import { OBJECTS, stageProbability, recordName, WON_STAGE } from './meta/objects.js'
+import { OBJECTS, stageProbability, recordName, splitFullName, WON_STAGE } from './meta/objects.js'
 import { todayISO, addDaysISO } from './format.js'
 
 const num = (v) => Number(v) || 0
@@ -133,7 +133,7 @@ function subscribeAll() {
     onSnapshot(
       scoped(name),
       (snap) => {
-        store[name] = snap.docs.map((d) => normalize({ id: d.id, ...d.data() }))
+        store[name] = snap.docs.map((d) => normalize({ id: d.id, ...d.data() }, name))
         if (pending > 0 && --pending === 0) store.loaded = true
       },
       (err) => {
@@ -175,12 +175,18 @@ function subscribeSms() {
 
 // Records created outside HaflaCREM (Firebase console, other apps) may use Firestore Timestamps
 // or lack our timestamp fields; normalize so dates and sorting still work.
-function normalize(r) {
+// Leads saved before the single Full Name field only have first/last name; show them as one name.
+function normalize(r, name) {
   for (const [k, v] of Object.entries(r)) if (v && typeof v.toMillis === 'function') r[k] = v.toMillis()
   if (typeof r.createdAt !== 'number') r.createdAt = typeof r.createdAt === 'string' ? Date.parse(r.createdAt) || 0 : 0
   if (typeof r.updatedAt !== 'number') r.updatedAt = r.createdAt
+  if (name === 'leads' && !r.fullName) r.fullName = [r.firstName, r.lastName].filter(Boolean).join(' ')
   return r
 }
+
+// Keep a lead's first/last name in step with its Full Name.
+const withNameParts = (objectKey, data) =>
+  objectKey === 'leads' && 'fullName' in data ? { ...data, ...splitFullName(data.fullName) } : data
 
 function unsubscribeAll() {
   unsubscribers.forEach((u) => u())
@@ -251,7 +257,7 @@ function clean(data) {
 
 export async function createRecord(objectKey, data) {
   const now = Date.now()
-  const record = { ...clean(data), ...ownerFor(data), createdAt: now, updatedAt: now }
+  const record = { ...clean(withNameParts(objectKey, data)), ...ownerFor(data), createdAt: now, updatedAt: now }
   if (objectKey === 'opportunities') {
     record.probability = stageProbability(record.stage)
     record.balance = num(record.amount) - num(record.amountPaid)
@@ -264,7 +270,7 @@ export async function createRecord(objectKey, data) {
 
 export async function updateRecord(objectKey, id, changes) {
   const before = getRecord(objectKey, id) || {}
-  const patch = { ...clean(changes), updatedAt: Date.now() }
+  const patch = { ...clean(withNameParts(objectKey, changes)), updatedAt: Date.now() }
   if (objectKey === 'opportunities') {
     if (patch.stage) {
       patch.probability = stageProbability(patch.stage)

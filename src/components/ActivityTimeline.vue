@@ -4,18 +4,20 @@ import { ref, reactive, computed } from 'vue'
 import Icon from './Icon.vue'
 import ObjectIcon from './ObjectIcon.vue'
 import { store, createRecord, updateRecord, deleteRecord, logActivity, toast } from '../store.js'
-import { date, dateTime, todayISO } from '../format.js'
+import { date, dateTime, dueLabel } from '../format.js'
+import { compareTasks, isTaskOverdue } from '../meta/objects.js'
 
 const props = defineProps({ object: String, recordId: String })
 
 const tab = ref('call')
-const form = reactive({ subject: '', body: '', dueDate: '' })
+const form = reactive({ subject: '', body: '', dueDate: '', dueTime: '' })
 const busy = ref(false)
 
 function reset() {
   form.subject = ''
   form.body = ''
   form.dueDate = ''
+  form.dueTime = ''
 }
 
 // Accounts roll up activity from their contacts and opportunities.
@@ -25,7 +27,7 @@ const matches = (x) =>
 
 const tasks = computed(() => store.tasks.filter(matches))
 const upcoming = computed(() =>
-  tasks.value.filter((t) => t.status !== 'Completed').sort((a, b) => (a.dueDate || '9999').localeCompare(b.dueDate || '9999')),
+  tasks.value.filter((t) => t.status !== 'Completed').sort(compareTasks),
 )
 
 const past = computed(() => {
@@ -48,7 +50,7 @@ async function submit() {
     if (tab.value === 'task') {
       if (!form.subject.trim()) return toast('Enter a subject for the task.', 'error')
       await createRecord('tasks', {
-        subject: form.subject.trim(), dueDate: form.dueDate || null, status: 'Not Started', priority: 'Normal',
+        subject: form.subject.trim(), dueDate: form.dueDate || null, dueTime: (form.dueDate && form.dueTime) || null, status: 'Not Started', priority: 'Normal',
         description: form.body, relatedType: props.object, relatedId: props.recordId,
       })
       toast('Task created.')
@@ -80,8 +82,6 @@ function toggle(id) {
 }
 
 const VERB = { call: 'logged a call', note: 'added a note', system: '', task: 'had a task', sms: 'sent an SMS' }
-const today = todayISO()
-const isOverdue = (t) => t.dueDate && t.dueDate < today
 </script>
 
 <template>
@@ -98,7 +98,10 @@ const isOverdue = (t) => t.dueDate && t.dueDate < today
       </div>
       <form class="composer-form" @submit.prevent="submit">
         <input v-model="form.subject" class="input" :placeholder="tab === 'call' ? 'Subject (e.g. Discovery call)' : tab === 'task' ? 'Subject (e.g. Send proposal)' : 'Title'" />
-        <input v-if="tab === 'task'" v-model="form.dueDate" class="input" type="date" aria-label="Due date" />
+        <div v-if="tab === 'task'" class="when">
+          <input v-model="form.dueDate" class="input" type="date" aria-label="Due date" />
+          <input v-model="form.dueTime" class="input" type="time" aria-label="Due time (optional)" title="Time (optional)" />
+        </div>
         <textarea v-model="form.body" class="textarea" rows="2" :placeholder="tab === 'note' ? 'Write a note...' : 'Comments'" />
         <div class="row">
           <span class="spacer" />
@@ -117,7 +120,7 @@ const isOverdue = (t) => t.dueDate && t.dueDate < today
             <input type="checkbox" :aria-label="'Complete ' + t.subject" @change="toggleTask(t)" />
             <RouterLink :to="`/o/tasks/${t.id}`" class="item-title truncate">{{ t.subject }}</RouterLink>
             <span class="spacer" />
-            <span class="small" :class="isOverdue(t) ? 'overdue' : 'muted'">{{ t.dueDate ? date(t.dueDate) : 'No due date' }}</span>
+            <span class="small" :class="isTaskOverdue(t) ? 'overdue' : 'muted'">{{ dueLabel(t) || 'No due date' }}</span>
           </div>
           <div class="muted small">{{ t.ownerName }} has an upcoming task<template v-if="object === 'accounts' && t.relatedType !== 'accounts'"> on a related record</template></div>
         </div>
@@ -171,4 +174,5 @@ const isOverdue = (t) => t.dueDate && t.dueDate < today
 .empty-line { padding: 8px 12px; }
 .del { opacity: 0; }
 .item:hover .del { opacity: 1; }
+.when { display: grid; grid-template-columns: minmax(0, 1fr) 140px; gap: 8px; }
 </style>

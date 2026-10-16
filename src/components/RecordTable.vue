@@ -4,7 +4,7 @@ import { ref, computed } from 'vue'
 import Icon from './Icon.vue'
 import FieldValue from './FieldValue.vue'
 import RowActions from './RowActions.vue'
-import { fieldDef, recordName } from '../meta/objects.js'
+import { fieldDef, recordName, taskDueAt } from '../meta/objects.js'
 import { nameOf, updateRecord, toast } from '../store.js'
 
 const props = defineProps({
@@ -26,6 +26,7 @@ function sortValue(r, key) {
   if (def.type === 'name') return recordName(props.object, r).toLowerCase()
   if (def.type === 'lookup') return nameOf(def.object, r[key]).toLowerCase()
   if (def.type === 'related') return r.relatedId ? nameOf(r.relatedType, r.relatedId).toLowerCase() : ''
+  if (props.object === 'tasks' && key === 'dueDate') return r.dueDate ? taskDueAt(r) : null
   const v = r[key]
   return typeof v === 'string' ? v.toLowerCase() : v
 }
